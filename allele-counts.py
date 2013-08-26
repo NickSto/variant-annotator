@@ -20,7 +20,7 @@ FREQ_THRES_DEFAULT = 1/100
 COVG_THRES_DEFAULT = 100
 
 def main():
-  
+
   args = len(sys.argv)
   if args == 1 or '-h' in sys.argv[1][0:3]:
     script_name = os.path.basename(sys.argv[0])
@@ -63,7 +63,6 @@ strand bias: Both strands must show the same bases passing the frequency
       pass
 
   global debug
-  print debug
   if debug:
     if args > 4:
       if ':' in sys.argv[4]:
@@ -234,38 +233,49 @@ def print_site(site, columns):
       print '\t'.join(fields)
 
 
-def get_read_counts(variants, freq_thres, strands='+-'):
+def get_read_counts(variant_counts, freq_thres, strands='+-', variants=None):
   """Count the number of reads for each base, and create a ranked list of
   alleles passing the frequency threshold.
       Arguments:
-  variants: Dict of the stranded variants (keys) and their read counts (values).
+  variant_counts: Dict of the stranded variants (keys) and their read counts (values).
   freq_thres: The frequency threshold each allele needs to pass to be included.
   strands: Which strand(s) to count. Can be '+', '-', or '+-' for both (default).
+  variants: A list of the variants of interest. Other types of variants will not
+    be included in the returned list. If no list is given, all variants found in
+    the variant_counts will be used.
       Return value:
   ranked_bases: A list of the alleles and their read counts. The elements are
     tuples (base, read count). The alleles are listed in descending order of
     frequency, and only those passing the threshold are included."""
 
-  done = {}
+  # If variant list is not given, create one from the variant_counts list
+  if not variants:
+   variants = [variant[1:] for variant in variant_counts]
+  # deduplicate via a dict
+  variant_dict = dict((variant, 1) for variant in variants)
+  variants = variant_dict.keys()
+
   ranked_bases = []
-  for variant in variants.keys():
-    variant = variant[1:]   # pop off the strand character
+  for variant in variants:
     reads = 0
     for strand in strands:
-      reads += variants.get(strand+variant, 0)
-    if not done.get(variant):
-      ranked_bases.append((variant, reads))
-    done[variant] = 1
+      reads += variant_counts.get(strand+variant, 0)
+    ranked_bases.append((variant, reads))
 
-  coverage = sum([base[1] for base in ranked_bases])
+  # get coverage for the specified strands
+  coverage = 0
+  for variant in variant_counts:
+    if variant[0] in strands:
+      coverage += variant_counts.get(variant, 0)
 
   # sort the list of alleles by read count
   ranked_bases.sort(reverse=True, key=lambda base: base[1])
 
-  # print 'coverage: '+str(coverage)+', freq_thres: '+str(freq_thres)
-  # for base in ranked_bases:
-  #   print (base[0]+': '+str(base[1])+'/'+str(float(coverage))+' = '+
-  #     str(base[1]/float(coverage)))
+  if debug:
+    print 'coverage: '+str(coverage)+', freq_thres: '+str(freq_thres)
+    for base in ranked_bases:
+      print (base[0]+': '+str(base[1])+'/'+str(float(coverage))+' = '+
+        str(base[1]/float(coverage)))
 
   # remove bases below the frequency threshold
   ranked_bases = [base for base in ranked_bases
@@ -274,7 +284,7 @@ def get_read_counts(variants, freq_thres, strands='+-'):
   return ranked_bases
 
 
-def count_alleles(variants, freq_thres, bases):
+def count_alleles(variant_counts, freq_thres, bases):
   """Determine how many alleles to report, based on filtering rules.
   The current rule determines which bases pass the frequency threshold on each
   strand individually, then compares the two sets of bases. If they are the same
@@ -282,8 +292,10 @@ def count_alleles(variants, freq_thres, bases):
   is zero."""
   allele_count = 0
 
-  alleles_plus  = get_read_counts(variants, freq_thres, strands='+')
-  alleles_minus = get_read_counts(variants, freq_thres, strands='-')
+  alleles_plus  = get_read_counts(variant_counts, freq_thres, variants=bases,
+    strands='+')
+  alleles_minus = get_read_counts(variant_counts, freq_thres, variants=bases,
+    strands='-')
   alleles_plus_sorted  = sorted([base[0] for base in alleles_plus if base[1]])
   alleles_minus_sorted = sorted([base[0] for base in alleles_minus if base[1]])
 
