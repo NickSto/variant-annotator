@@ -2,17 +2,10 @@
 # This parses the output of Dan's "Naive Variant Detector" (previously,
 # "BAM Coverage"). It was forked from the code of "bam-coverage.py".
 #
-# New in this version: noncanonical variants (e.g. non-A/C/G/T SNVs) are ignored
-#   entirely, in all respects (or as many as possible)
-#   - That is, I ignore them at the point of parsing the VCF so they effectively
-#     don't exist.
+# New in this version: option to read from stdin
 #
 # TODO:
-# - account for new possibility of no major allele
-#   - if the only allele above the threshold is a non-canonical one
-#   - make sure the top canonical allele above the threshold is reported in the 
-#     major allele column
-# - make sure it handles input files with multiple SAMPLE columns
+# - test handling of -c 0 (and -f 0?)
 # - should it technically handle data lines that start with a '#'?
 import os
 import sys
@@ -22,7 +15,7 @@ COLUMNS = ['sample', 'chr', 'pos', 'A', 'C', 'G', 'T', 'coverage', 'alleles',
   'major', 'minor', 'freq'] #, 'bias']
 CANONICAL_VARIANTS = ['A', 'C', 'G', 'T']
 USAGE = 'Usage: %prog [options] variants.vcf > alleles.csv'
-OPT_DEFAULTS = {'freq_thres':1.0, 'covg_thres':100, 'print_header':False}
+OPT_DEFAULTS = {'freq_thres':1.0, 'covg_thres':100, 'print_header':False, 'stdin':False}
 DESCRIPTION = """This will parse the VCF output of Dan's "Naive Variant Caller" (aka "BAM Coverage") Galaxy tool. For each position reported, it counts the number of reads of each base, determines the major allele, minor allele (second most frequent variant), and number of alleles above a threshold. So currently it only considers SNVs (ACGT), including in the coverage figure. It prints to standard out."""
 EPILOG = """Requirements:
 The input VCF must report the variants for each strand.
@@ -44,20 +37,29 @@ def get_options(defaults, usage, description='', epilog=''):
   parser.add_option('-H', '--header', dest='print_header', action='store_const',
     const=not(defaults.get('print_header')), default=defaults.get('print_header'),
     help='Print header line. This is a #-commented line with the column labels. Off by default.')
+  parser.add_option('-i', '--stdin', dest='stdin', action='store_const',
+    const=not(defaults.get('stdin')), default=defaults.get('stdin'),
+    help='Read from standard input instead of a filename argument.')
   parser.add_option('-d', '--debug', dest='debug', action='store_true',
     default=False,
-    help='Turn on debug mode.')
+    help='Turn on debug mode. You must also specify a single site to process in a final argument using UCSC coordinate format.')
 
   (options, args) = parser.parse_args()
 
+  # read in positional arguments
   arguments = {}
-  if len(args) >= 1:
-    arguments['infile'] = args[0]
-  else:
-    parser.print_help()
-    fail("Error: Did not supply an input filename.")
-  if len(args) >= 2:
-    arguments['print_loc'] = args[1]
+  if not options.stdin:
+    if len(args) >= 1:
+      arguments['filename'] = args[0]
+      args.remove(args[0])
+    else:
+      parser.print_help()
+      fail("Error: Did not supply an input filename or use -i to read from "
+        +"standard input.")
+  if options.debug:
+    if len(args) >= 1:
+      arguments['print_loc'] = args[0]
+      args.remove(args[0])
 
   return (options, arguments)
 
@@ -66,10 +68,11 @@ def main():
 
   (options, args) = get_options(OPT_DEFAULTS, USAGE, DESCRIPTION, EPILOG)
 
-  filename = args.get('infile')
+  filename = args.get('filename')
   print_header = options.print_header
   freq_thres = options.freq_thres / 100.0
   covg_thres = options.covg_thres
+  stdin = options.stdin
   debug = options.debug
 
   if debug:
@@ -80,49 +83,58 @@ def main():
       else:
         print_pos = print_loc
     else:
-      # pass
+      sys.stderr.write("Warning: No site coordinate found in arguments. "
+        +"Turning off debug mode.\n")
       debug = False
 
   if print_header:
     print '#'+'\t'.join(COLUMNS)
 
-  if not os.path.exists(filename):
-    fail('Error: Input variants file '+filename+' does not exist.')
+  if stdin:
+    filehandle = sys.stdin
+    sys.stderr.write("Reading from standard input..\n")
+  else:
+    if os.path.exists(filename):
+      filehandle = open(filename, 'r')
+    else:
+      fail('Error: Input VCF file '+filename+' not found.')
 
   # main loop: process and print one line at a time
   sample_names = []
-  with open(filename, 'r') as lines:
-    for line in lines:
-      line = line.rstrip('\r\n')
+  for line in filehandle:
+    line = line.rstrip('\r\n')
 
-      # header lines
-      if line[0] == '#':
-        if line[0:6].upper() == '#CHROM':
-          sample_names = line.split('\t')[9:]
+    # header lines
+    if line[0] == '#':
+      if line[0:6].upper() == '#CHROM':
+        sample_names = line.split('\t')[9:]
+      continue
+
+    if not sample_names:
+      fail("Error in input VCF: Data line encountered before header line. "
+        +"Failed on line:\n"+line)
+
+    site_data = read_site(line, sample_names, CANONICAL_VARIANTS)
+
+    if debug:
+      if site_data['pos'] != print_pos:
         continue
-
-      if not sample_names:
-        fail("Error in input VCF: Data line encountered before header line. "
-          +"Failed on line:\n"+line)
-
-      site_data = read_site(line, sample_names, CANONICAL_VARIANTS)
-
-      if debug:
-        if site_data['pos'] != print_pos:
+      try:
+        if site_data['chr'] != print_chr:
           continue
-        try:
-          if site_data['chr'] != print_chr:
-            continue
-        except NameError, e:
-          pass  # No chr specified. Just go ahead and print the line.
+      except NameError, e:
+        pass  # No chr specified. Just go ahead and print the line.
 
+    site_summary = summarize_site(site_data, sample_names, CANONICAL_VARIANTS,
+      freq_thres, covg_thres, debug=debug)
 
-      site_summary = summarize_site(site_data, sample_names, CANONICAL_VARIANTS,
-        freq_thres, covg_thres, debug=debug)
+    if debug and site_summary[0]['print']:
+      print line.split('\t')[9].split(':')[-1]
 
-      if debug and site_summary[0]['print']: print line.split('\t')[9].split(':')[-1]
+    print_site(site_summary, COLUMNS)
 
-      print_site(site_summary, COLUMNS)
+  if filehandle is not sys.stdin:
+    filehandle.close()
 
 
 
