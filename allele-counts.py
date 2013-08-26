@@ -2,79 +2,90 @@
 # This parses the output of Dan's "Naive Variant Detector" (previously,
 # "BAM Coverage"). It was forked from the code of "bam-coverage.py".
 #
+# Note: This is the last version that calculates coverage based on ALL reads,
+#   not just ACGT variants.
+#
 # TODO:
-# - use actual flagged options
-# - option to include a header in the output
+# - account for new possibility of no major allele
+#   - if the only allele above the threshold is a non-canonical one
+#   - make sure the top canonical allele above the threshold is reported in the 
+#     major allele column
 # - should it technically handle data lines that start with a '#'?
 import os
 import sys
-
-debug = True
-# debug = False
+from optparse import OptionParser
 
 COLUMNS = ['sample', 'chr', 'pos', 'A', 'C', 'G', 'T', 'coverage', 'alleles',
   'major', 'minor', 'freq'] #, 'bias']
-BASES = ['A', 'C', 'G', 'T', 'N']
-PRINT_HEADER_DEFAULT = False
-FREQ_THRES_DEFAULT = 1/100
-COVG_THRES_DEFAULT = 100
+BASES = ['A', 'C', 'G', 'T']
+USAGE = 'Usage: %prog [options] variants.vcf > alleles.csv'
+OPT_DEFAULTS = {'freq_thres':1.0, 'covg_thres':100, 'print_header':False}
+DESCRIPTION = """This will parse the VCF output of Dan's "Naive Variant Caller" (aka "BAM Coverage") Galaxy tool. For each position reported, it counts the number of reads of each base, determines the major allele, minor allele (second most frequent variant), and number of alleles above a threshold. So currently it only considers SNVs (ACGTN), though all variant types count toward coverage. It prints to standard out."""
+EPILOG = """Requirements:
+The input VCF must report the variants for each strand.
+The variants should be case-sensitive (e.g. all capital base letters).
+Strand bias: Both strands must show the same bases passing the frequency threshold (but not necessarily in the same order). If the site fails this test, the number of alleles is reported as 0."""
+
+
+def get_options(defaults, usage, description='', epilog=''):
+  """Get options, print usage text."""
+
+  parser = OptionParser(usage=usage, description=description, epilog=epilog)
+
+  parser.add_option('-f', '--freq-thres', dest='freq_thres', type='float',
+    default=defaults.get('freq_thres'),
+    help='Frequency threshold for counting alleles, given in percentage: -f 1 = 1% frequency. Default is %default%.')
+  parser.add_option('-c', '--covg-thres', dest='covg_thres', type='int',
+    default=defaults.get('covg_thres'),
+    help='Coverage threshold. Each site must be supported by at least this many reads on each strand. Otherwise the site will not be printed in the output. The default is %default reads per strand.')
+  parser.add_option('-H', '--header', dest='print_header', action='store_const',
+    const=not(defaults.get('print_header')), default=defaults.get('print_header'),
+    help='Print header line. This is a #-commented line with the column labels. Off by default.')
+  parser.add_option('-d', '--debug', dest='debug', action='store_true',
+    default=False,
+    help='Turn on debug mode.')
+
+  (options, args) = parser.parse_args()
+
+  arguments = {}
+  if len(args) >= 1:
+    arguments['infile'] = args[0]
+  else:
+    parser.print_help()
+    sys.stderr.write("Error: Did not supply an input filename.")
+    sys.exit(1)
+  if len(args) >= 2:
+    arguments['print_loc'] = args[1]
+
+  return (options, arguments)
+
 
 def main():
 
-  args = len(sys.argv)
-  if args == 1 or '-h' in sys.argv[1][0:3]:
-    script_name = os.path.basename(sys.argv[0])
-    print """USAGE:
-  $ """+script_name+""" variants.vcf [frequency] [coverage] > alleles.csv
-This will parse the VCF output of Dan's "Naive Variant Caller" (aka "BAM
-Coverage") Galaxy tool. For each position reported, it counts the number of
-reads of each base, determines the major allele, minor allele (second most
-frequent variant), and number of alleles above a threshold.
+  (options, args) = get_options(OPT_DEFAULTS, USAGE, DESCRIPTION, EPILOG)
 
-Requirements:
-input: The input VCF must report the variants per strand. Note: the variants
-  are case-sensitive.
-frequency: Alleles are only counted when they are above a default threshold
-  of 1% frequency, but a different value can be given as the second argument.
-coverage: Positions are required to have at least 100x coverage on each strand
-  by default, but a different value can be given as the third argument.
-  Positions below this coverage will not be reported.
-strand bias: Both strands must show the same bases passing the frequency
-  threshold (but not necessarily in the same order of frequency). If the
-  position fails this test, the number of alleles is reported as 0."""
-    sys.exit(0)
+  filename = args.get('infile')
+  print_header = options.print_header
+  freq_thres = options.freq_thres / 100.0
+  covg_thres = options.covg_thres
+  debug = options.debug
 
-  print_header = PRINT_HEADER_DEFAULT
-  freq_thres = FREQ_THRES_DEFAULT
-  covg_thres = COVG_THRES_DEFAULT
-
-  # get arguments
-  if args > 1:
-    filename = sys.argv[1]
-  if args > 2:
-    try:
-      freq_thres = int(sys.argv[2])/100.0
-    except ValueError, e:
-      pass
-  if args > 3:
-    try:
-      covg_thres = int(sys.argv[3])
-    except ValueError, e:
-      pass
-
-  global debug
   if debug:
-    if args > 4:
-      if ':' in sys.argv[4]:
-        (print_chr, print_pos) = sys.argv[4].split(':')
+    print_loc = args.get('print_loc')
+    if print_loc:
+      if ':' in print_loc:
+        (print_chr, print_pos) = print_loc.split(':')
       else:
-        print_pos = sys.argv[4]
+        print_pos = print_loc
     else:
       # pass
       debug = False
 
   if print_header:
     print '#'+'\t'.join(COLUMNS)
+
+  if not os.path.exists(filename):
+    fail('Error: Input variants file '+filename+' does not exist.')
 
   # main loop: process and print one line at a time
   sample_names = []
@@ -104,7 +115,7 @@ strand bias: Both strands must show the same bases passing the frequency
 
 
       site_summary = summarize_site(site_data, sample_names, BASES, freq_thres,
-        covg_thres)
+        covg_thres, debug=debug)
 
       if debug and site_summary[0]['print']: print line.split('\t')[9].split(':')[-1]
 
@@ -158,7 +169,7 @@ def read_site(line, sample_names):
   return site
 
 
-def summarize_site(site, sample_names, bases, freq_thres, covg_thres):
+def summarize_site(site, sample_names, bases, freq_thres, covg_thres, debug=False):
   """Take the raw data from the VCF line and transform it into the summary data
   to be printed in the output format."""
 
@@ -193,7 +204,7 @@ def summarize_site(site, sample_names, bases, freq_thres, covg_thres):
       sample['print'] = True
 
     # get an ordered list of read counts for all variants (either strand)
-    ranked_bases = get_read_counts(variants, 0, strands='+-')
+    ranked_bases = get_read_counts(variants, 0, strands='+-', debug=debug)
 
     # record read counts into dict for this sample
     for base in ranked_bases:
@@ -203,9 +214,12 @@ def summarize_site(site, sample_names, bases, freq_thres, covg_thres):
       if not sample.has_key(base):
         sample[base] = 0
 
+    sample['alleles']  = count_alleles(variants, freq_thres, bases, debug=debug)
+
     # set minor allele to N if there's a tie for 2nd
     if len(ranked_bases) >= 3 and ranked_bases[1][1] == ranked_bases[2][1]:
       ranked_bases[1] = ('N', 0)
+      sample['alleles'] = 1
 
     if debug: print ranked_bases
 
@@ -217,8 +231,6 @@ def summarize_site(site, sample_names, bases, freq_thres, covg_thres):
     except IndexError, e:
       sample['minor']  = '.'
       sample['freq']   = 0.0
-
-    sample['alleles']  = count_alleles(variants, freq_thres, bases)
 
     site_summary.append(sample)
 
@@ -233,7 +245,8 @@ def print_site(site, columns):
       print '\t'.join(fields)
 
 
-def get_read_counts(variant_counts, freq_thres, strands='+-', variants=None):
+def get_read_counts(variant_counts, freq_thres, strands='+-', variants=None,
+  debug=False):
   """Count the number of reads for each base, and create a ranked list of
   alleles passing the frequency threshold.
       Arguments:
@@ -284,7 +297,7 @@ def get_read_counts(variant_counts, freq_thres, strands='+-', variants=None):
   return ranked_bases
 
 
-def count_alleles(variant_counts, freq_thres, bases):
+def count_alleles(variant_counts, freq_thres, bases, debug=False):
   """Determine how many alleles to report, based on filtering rules.
   The current rule determines which bases pass the frequency threshold on each
   strand individually, then compares the two sets of bases. If they are the same
@@ -293,12 +306,13 @@ def count_alleles(variant_counts, freq_thres, bases):
   allele_count = 0
 
   alleles_plus  = get_read_counts(variant_counts, freq_thres, variants=bases,
-    strands='+')
+    strands='+', debug=debug)
   alleles_minus = get_read_counts(variant_counts, freq_thres, variants=bases,
-    strands='-')
+    strands='-', debug=debug)
+
+  # check if each strand reports the same set of alleles
   alleles_plus_sorted  = sorted([base[0] for base in alleles_plus if base[1]])
   alleles_minus_sorted = sorted([base[0] for base in alleles_minus if base[1]])
-
   if alleles_plus_sorted == alleles_minus_sorted:
     allele_count = len(alleles_plus)
 
