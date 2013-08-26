@@ -2,14 +2,17 @@
 # This parses the output of Dan's "Naive Variant Detector" (previously,
 # "BAM Coverage"). It was forked from the code of "bam-coverage.py".
 #
-# Note: This is the last version that calculates coverage based on ALL reads,
-#   not just ACGT variants.
+# New in this version: noncanonical variants (e.g. non-A/C/G/T SNVs) are ignored
+#   entirely, in all respects (or as many as possible)
+#   - That is, I ignore them at the point of parsing the VCF so they effectively
+#     don't exist.
 #
 # TODO:
 # - account for new possibility of no major allele
 #   - if the only allele above the threshold is a non-canonical one
 #   - make sure the top canonical allele above the threshold is reported in the 
 #     major allele column
+# - make sure it handles input files with multiple SAMPLE columns
 # - should it technically handle data lines that start with a '#'?
 import os
 import sys
@@ -17,10 +20,10 @@ from optparse import OptionParser
 
 COLUMNS = ['sample', 'chr', 'pos', 'A', 'C', 'G', 'T', 'coverage', 'alleles',
   'major', 'minor', 'freq'] #, 'bias']
-BASES = ['A', 'C', 'G', 'T']
+CANONICAL_VARIANTS = ['A', 'C', 'G', 'T']
 USAGE = 'Usage: %prog [options] variants.vcf > alleles.csv'
 OPT_DEFAULTS = {'freq_thres':1.0, 'covg_thres':100, 'print_header':False}
-DESCRIPTION = """This will parse the VCF output of Dan's "Naive Variant Caller" (aka "BAM Coverage") Galaxy tool. For each position reported, it counts the number of reads of each base, determines the major allele, minor allele (second most frequent variant), and number of alleles above a threshold. So currently it only considers SNVs (ACGTN), though all variant types count toward coverage. It prints to standard out."""
+DESCRIPTION = """This will parse the VCF output of Dan's "Naive Variant Caller" (aka "BAM Coverage") Galaxy tool. For each position reported, it counts the number of reads of each base, determines the major allele, minor allele (second most frequent variant), and number of alleles above a threshold. So currently it only considers SNVs (ACGT), including in the coverage figure. It prints to standard out."""
 EPILOG = """Requirements:
 The input VCF must report the variants for each strand.
 The variants should be case-sensitive (e.g. all capital base letters).
@@ -52,8 +55,7 @@ def get_options(defaults, usage, description='', epilog=''):
     arguments['infile'] = args[0]
   else:
     parser.print_help()
-    sys.stderr.write("Error: Did not supply an input filename.")
-    sys.exit(1)
+    fail("Error: Did not supply an input filename.")
   if len(args) >= 2:
     arguments['print_loc'] = args[1]
 
@@ -100,9 +102,10 @@ def main():
         continue
 
       if not sample_names:
-        fail("Error in input VCF: Data line encountered before header line.")
+        fail("Error in input VCF: Data line encountered before header line. "
+          +"Failed on line:\n"+line)
 
-      site_data = read_site(line, sample_names)
+      site_data = read_site(line, sample_names, CANONICAL_VARIANTS)
 
       if debug:
         if site_data['pos'] != print_pos:
@@ -111,21 +114,20 @@ def main():
           if site_data['chr'] != print_chr:
             continue
         except NameError, e:
-          "No chr specified. Just go ahead and print the line"
+          pass  # No chr specified. Just go ahead and print the line.
 
 
-      site_summary = summarize_site(site_data, sample_names, BASES, freq_thres,
-        covg_thres, debug=debug)
+      site_summary = summarize_site(site_data, sample_names, CANONICAL_VARIANTS,
+        freq_thres, covg_thres, debug=debug)
 
       if debug and site_summary[0]['print']: print line.split('\t')[9].split(':')[-1]
 
       print_site(site_summary, COLUMNS)
 
-      # return
 
 
 
-def read_site(line, sample_names):
+def read_site(line, sample_names, canonical):
   """Read in a line, parse the variants into a data structure, and return it.
   The line should be actual site data, not a header line, so check beforehand.
   Notes:
@@ -135,11 +137,19 @@ def read_site(line, sample_names):
   fields = line.split('\t')
 
   if len(fields) < 9:
-    fail("Error in input VCF: wrong number of fields in data line.")
+    fail("Error in input VCF: wrong number of fields in data line. "
+          +"Failed on line:\n"+line)
 
   site['chr'] = fields[0]
   site['pos'] = fields[1]
   samples     = fields[9:]
+
+  if len(samples) < len(sample_names):
+    fail("Error in input VCF: missing sample fields in data line. "
+          +"Failed on line:\n"+line)
+  elif len(samples) > len(sample_names):
+    fail("Error in input VCF: more sample fields in data line than in header. "
+          +"Failed on line:\n"+line)
 
   sample_counts = {}
   for i in range(len(samples)):
@@ -151,35 +161,41 @@ def read_site(line, sample_names):
     for count in counts:
       if not count:
         continue
-      (variant, reads) = count.split('=')
+      fields = count.split('=')
+      if len(fields) != 2:
+        fail("Error in input VCF: Incorrect variant data format (must contain "
+          +"a single '='). Failed on line:\n"+line)
+      (variant, reads) = fields
+      if variant[1:] not in canonical:
+        continue
       if variant[0] != '-' and variant[0] != '+':
-        fail("Error in input VCF: variant data not strand-specific.")
+        fail("Error in input VCF: variant data not strand-specific. "
+          +"Failed on line:\n"+line)
       try:
         variant_counts[variant] = int(reads)
       except ValueError, e:
         continue
 
-    if i < len(sample_names):
-      sample_counts[sample_names[i]] = variant_counts
-    else:
-      fail("Error in input VCF: more sample fields in data line than in header.")
+    sample_counts[sample_names[i]] = variant_counts
 
   site['samples'] = sample_counts
 
   return site
 
 
-def summarize_site(site, sample_names, bases, freq_thres, covg_thres, debug=False):
+def summarize_site(site, sample_names, canonical, freq_thres, covg_thres,
+  debug=False):
   """Take the raw data from the VCF line and transform it into the summary data
   to be printed in the output format."""
 
   site_summary = []
   for sample_name in sample_names:
 
-    sample = {}
+    sample = {'print':False}
     variants = site['samples'].get(sample_name)
     if not variants:
-      fail("Error in input VCF: missing sample fields in data line.")
+      site_summary.append(sample)
+      continue
 
     sample['sample'] = sample_name
     sample['chr']    = site['chr']
@@ -196,8 +212,7 @@ def summarize_site(site, sample_names, bases, freq_thres, covg_thres, debug=Fals
       elif variant[0] == '-':
         covg_minus += variants[variant]
     # stranded coverage threshold
-    if covg_plus < covg_thres or covg_minus < covg_thres:
-      sample['print'] = False
+    if coverage <= 0 or covg_plus < covg_thres or covg_minus < covg_thres:
       site_summary.append(sample)
       continue
     else:
@@ -210,21 +225,24 @@ def summarize_site(site, sample_names, bases, freq_thres, covg_thres, debug=Fals
     for base in ranked_bases:
       sample[base[0]] = base[1]
     # fill in any zeros
-    for base in bases:
-      if not sample.has_key(base):
-        sample[base] = 0
+    for variant in canonical:
+      if not sample.has_key(variant):
+        sample[variant] = 0
 
-    sample['alleles']  = count_alleles(variants, freq_thres, bases, debug=debug)
+    sample['alleles']  = count_alleles(variants, freq_thres, debug=debug)
 
     # set minor allele to N if there's a tie for 2nd
     if len(ranked_bases) >= 3 and ranked_bases[1][1] == ranked_bases[2][1]:
       ranked_bases[1] = ('N', 0)
-      sample['alleles'] = 1
+      sample['alleles'] = 1 if sample['alleles'] else 0
 
     if debug: print ranked_bases
 
     sample['coverage'] = coverage
-    sample['major']    = ranked_bases[0][0]
+    try:
+      sample['major']  = ranked_bases[0][0]
+    except IndexError, e:
+      sample['major']  = '.'
     try:
       sample['minor']  = ranked_bases[1][0]
       sample['freq']   = ranked_bases[1][1] / float(coverage)
@@ -245,8 +263,7 @@ def print_site(site, columns):
       print '\t'.join(fields)
 
 
-def get_read_counts(variant_counts, freq_thres, strands='+-', variants=None,
-  debug=False):
+def get_read_counts(variant_counts, freq_thres, strands='+-', debug=False):
   """Count the number of reads for each base, and create a ranked list of
   alleles passing the frequency threshold.
       Arguments:
@@ -261,9 +278,8 @@ def get_read_counts(variant_counts, freq_thres, strands='+-', variants=None,
     tuples (base, read count). The alleles are listed in descending order of
     frequency, and only those passing the threshold are included."""
 
-  # If variant list is not given, create one from the variant_counts list
-  if not variants:
-   variants = [variant[1:] for variant in variant_counts]
+  # Get list of all variants from variant_counts list
+  variants = [variant[1:] for variant in variant_counts]
   # deduplicate via a dict
   variant_dict = dict((variant, 1) for variant in variants)
   variants = variant_dict.keys()
@@ -280,12 +296,16 @@ def get_read_counts(variant_counts, freq_thres, strands='+-', variants=None,
   for variant in variant_counts:
     if variant[0] in strands:
       coverage += variant_counts.get(variant, 0)
+  # if debug: print "strands: "+strands+', covg: '+str(coverage)
+
+  if coverage < 1:
+    return []
 
   # sort the list of alleles by read count
   ranked_bases.sort(reverse=True, key=lambda base: base[1])
 
   if debug:
-    print 'coverage: '+str(coverage)+', freq_thres: '+str(freq_thres)
+    print strands+' coverage: '+str(coverage)+', freq_thres: '+str(freq_thres)
     for base in ranked_bases:
       print (base[0]+': '+str(base[1])+'/'+str(float(coverage))+' = '+
         str(base[1]/float(coverage)))
@@ -297,7 +317,7 @@ def get_read_counts(variant_counts, freq_thres, strands='+-', variants=None,
   return ranked_bases
 
 
-def count_alleles(variant_counts, freq_thres, bases, debug=False):
+def count_alleles(variant_counts, freq_thres, debug=False):
   """Determine how many alleles to report, based on filtering rules.
   The current rule determines which bases pass the frequency threshold on each
   strand individually, then compares the two sets of bases. If they are the same
@@ -305,10 +325,14 @@ def count_alleles(variant_counts, freq_thres, bases, debug=False):
   is zero."""
   allele_count = 0
 
-  alleles_plus  = get_read_counts(variant_counts, freq_thres, variants=bases,
-    strands='+', debug=debug)
-  alleles_minus = get_read_counts(variant_counts, freq_thres, variants=bases,
-    strands='-', debug=debug)
+  alleles_plus  = get_read_counts(variant_counts, freq_thres, debug=debug,
+    strands='+')
+  alleles_minus = get_read_counts(variant_counts, freq_thres, debug=debug,
+    strands='-')
+
+  if debug:
+    print '+ '+str(alleles_plus)
+    print '- '+str(alleles_minus)
 
   # check if each strand reports the same set of alleles
   alleles_plus_sorted  = sorted([base[0] for base in alleles_plus if base[1]])
