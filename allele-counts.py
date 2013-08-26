@@ -1,6 +1,6 @@
 #!/usr/bin/python
-# This parses the output of Dan's "Naive Variant Caller" (previously, "BAM
-# Coverage"). It was forked from the code of "bam-coverage.py".
+# This parses the output of Dan's "Naive Variant Detector" (previously,
+# "BAM Coverage"). It was forked from the code of "bam-coverage.py".
 #
 # TODO:
 # - use actual flagged options
@@ -9,15 +9,18 @@
 import os
 import sys
 
+debug = True
+# debug = False
+
 COLUMNS = ['sample', 'chr', 'pos', 'A', 'C', 'G', 'T', 'coverage', 'alleles',
   'major', 'minor', 'freq'] #, 'bias']
 BASES = ['A', 'C', 'G', 'T', 'N']
-PRINT_HEADER_DEFAULT = True
-FREQ_THRES_DEFAULT = 1 #percent
+PRINT_HEADER_DEFAULT = False
+FREQ_THRES_DEFAULT = 1/100
 COVG_THRES_DEFAULT = 100
 
 def main():
-
+  
   args = len(sys.argv)
   if args == 1 or '-h' in sys.argv[1][0:3]:
     script_name = os.path.basename(sys.argv[0])
@@ -29,7 +32,8 @@ reads of each base, determines the major allele, minor allele (second most
 frequent variant), and number of alleles above a threshold.
 
 Requirements:
-input: The input VCF must report the variants per strand.
+input: The input VCF must report the variants per strand. Note: the variants
+  are case-sensitive.
 frequency: Alleles are only counted when they are above a default threshold
   of 1% frequency, but a different value can be given as the second argument.
 coverage: Positions are required to have at least 100x coverage on each strand
@@ -49,7 +53,7 @@ strand bias: Both strands must show the same bases passing the frequency
     filename = sys.argv[1]
   if args > 2:
     try:
-      freq_thres = int(sys.argv[2])
+      freq_thres = int(sys.argv[2])/100.0
     except ValueError, e:
       pass
   if args > 3:
@@ -57,6 +61,18 @@ strand bias: Both strands must show the same bases passing the frequency
       covg_thres = int(sys.argv[3])
     except ValueError, e:
       pass
+
+  global debug
+  print debug
+  if debug:
+    if args > 4:
+      if ':' in sys.argv[4]:
+        (print_chr, print_pos) = sys.argv[4].split(':')
+      else:
+        print_pos = sys.argv[4]
+    else:
+      # pass
+      debug = False
 
   if print_header:
     print '#'+'\t'.join(COLUMNS)
@@ -78,28 +94,25 @@ strand bias: Both strands must show the same bases passing the frequency
 
       site_data = read_site(line, sample_names)
 
+      if debug:
+        if site_data['pos'] != print_pos:
+          continue
+        try:
+          if site_data['chr'] != print_chr:
+            continue
+        except NameError, e:
+          "No chr specified. Just go ahead and print the line"
+
+
       site_summary = summarize_site(site_data, sample_names, BASES, freq_thres,
         covg_thres)
+
+      if debug and site_summary[0]['print']: print line.split('\t')[9].split(':')[-1]
 
       print_site(site_summary, COLUMNS)
 
       # return
 
-
-
-  print HEADER
-  for snp in snps:
-    total = As = Ts = Gs = Cs = Ns = 0
-    for variant in snp['variants']:
-      As += variant.get('a', 0)
-      Ts += variant.get('t', 0)
-      Gs += variant.get('g', 0)
-      Cs += variant.get('c', 0)
-      Ns += variant.get('n', 0)
-    total = As + Ts + Gs + Cs + Ns
-    line = "\t".join(map(str, [total, As, Ts, Gs, Cs, Ns]))
-    sys.stdout.write(snp['chr']+':'+snp['pos']+'\t')
-    print line
 
 
 def read_site(line, sample_names):
@@ -126,14 +139,13 @@ def read_site(line, sample_names):
     counts = counts.split(',')
 
     for count in counts:
-      if len(count) < 4:
+      if not count:
         continue
-      if count[0] != '-' and count[0] != '+':
+      (variant, reads) = count.split('=')
+      if variant[0] != '-' and variant[0] != '+':
         fail("Error in input VCF: variant data not strand-specific.")
-      base = count[0:2]
-      reads = count[3:]
       try:
-        variant_counts[base.upper()] = int(reads)
+        variant_counts[variant] = int(reads)
       except ValueError, e:
         continue
 
@@ -163,43 +175,51 @@ def summarize_site(site, sample_names, bases, freq_thres, covg_thres):
     sample['chr']    = site['chr']
     sample['pos']    = site['pos']
 
-    coverage = 0
-    top_base = ''
-    top_base_reads = 0
-    second_base = ''
-    second_base_reads = 0
-    for base in bases:
-      reads = 0
-      reads = variants.get('-'+base, 0)
-      reads += variants.get('+'+base, 0)
-      sample[base] = reads
-      coverage += reads
+    coverage = sum(variants.values())
 
-      if reads > top_base_reads:
-        second_base = top_base
-        second_base_reads = top_base_reads
-        top_base = base
-        top_base_reads = reads
-      elif reads > second_base_reads:
-        second_base = base
-        second_base_reads = reads
-
-    if top_base_reads == second_base_reads:
-      second_base = 'N'
-      second_base_reads = 0
-
-    sample['coverage'] = coverage
-    sample['major']    = top_base or '.'
-    sample['minor']    = second_base or '.'
-    sample['freq']     = second_base_reads / coverage
-
-    sample['alleles']  = count_alleles(sample, bases)
-
-    # Coverage threshold
-    if coverage < covg_thres:
+    # get stranded coverage
+    covg_plus = 0
+    covg_minus = 0
+    for variant in variants:
+      if variant[0] == '+':
+        covg_plus += variants[variant]
+      elif variant[0] == '-':
+        covg_minus += variants[variant]
+    # stranded coverage threshold
+    if covg_plus < covg_thres or covg_minus < covg_thres:
       sample['print'] = False
+      site_summary.append(sample)
+      continue
     else:
       sample['print'] = True
+
+    # get an ordered list of read counts for all variants (either strand)
+    ranked_bases = get_read_counts(variants, 0, strands='+-')
+
+    # record read counts into dict for this sample
+    for base in ranked_bases:
+      sample[base[0]] = base[1]
+    # fill in any zeros
+    for base in bases:
+      if not sample.has_key(base):
+        sample[base] = 0
+
+    # set minor allele to N if there's a tie for 2nd
+    if len(ranked_bases) >= 3 and ranked_bases[1][1] == ranked_bases[2][1]:
+      ranked_bases[1] = ('N', 0)
+
+    if debug: print ranked_bases
+
+    sample['coverage'] = coverage
+    sample['major']    = ranked_bases[0][0]
+    try:
+      sample['minor']  = ranked_bases[1][0]
+      sample['freq']   = ranked_bases[1][1] / float(coverage)
+    except IndexError, e:
+      sample['minor']  = '.'
+      sample['freq']   = 0.0
+
+    sample['alleles']  = count_alleles(variants, freq_thres, bases)
 
     site_summary.append(sample)
 
@@ -208,22 +228,69 @@ def summarize_site(site, sample_names, bases, freq_thres, covg_thres):
 
 def print_site(site, columns):
   """Print the output lines for one site (one per sample)."""
-
   for sample in site:
     if sample['print']:
       fields = [str(sample.get(column)) for column in columns]
       print '\t'.join(fields)
 
 
+def get_read_counts(variants, freq_thres, strands='+-'):
+  """Count the number of reads for each base, and create a ranked list of
+  alleles passing the frequency threshold.
+      Arguments:
+  variants: Dict of the stranded variants (keys) and their read counts (values).
+  freq_thres: The frequency threshold each allele needs to pass to be included.
+  strands: Which strand(s) to count. Can be '+', '-', or '+-' for both (default).
+      Return value:
+  ranked_bases: A list of the alleles and their read counts. The elements are
+    tuples (base, read count). The alleles are listed in descending order of
+    frequency, and only those passing the threshold are included."""
 
-def count_alleles(sample, bases):
-  """Determine how many alleles to report, based on filtering rules."""
-  alleles = 0
-  # PLACEHOLDER (no filter)
-  for base in bases:
-    if sample[base]:
-      alleles+=1
-  return alleles
+  done = {}
+  ranked_bases = []
+  for variant in variants.keys():
+    variant = variant[1:]   # pop off the strand character
+    reads = 0
+    for strand in strands:
+      reads += variants.get(strand+variant, 0)
+    if not done.get(variant):
+      ranked_bases.append((variant, reads))
+    done[variant] = 1
+
+  coverage = sum([base[1] for base in ranked_bases])
+
+  # sort the list of alleles by read count
+  ranked_bases.sort(reverse=True, key=lambda base: base[1])
+
+  # print 'coverage: '+str(coverage)+', freq_thres: '+str(freq_thres)
+  # for base in ranked_bases:
+  #   print (base[0]+': '+str(base[1])+'/'+str(float(coverage))+' = '+
+  #     str(base[1]/float(coverage)))
+
+  # remove bases below the frequency threshold
+  ranked_bases = [base for base in ranked_bases
+    if base[1]/float(coverage) >= freq_thres]
+
+  return ranked_bases
+
+
+def count_alleles(variants, freq_thres, bases):
+  """Determine how many alleles to report, based on filtering rules.
+  The current rule determines which bases pass the frequency threshold on each
+  strand individually, then compares the two sets of bases. If they are the same
+  (regardless of order), the allele count is the number of bases. Otherwise it
+  is zero."""
+  allele_count = 0
+
+  alleles_plus  = get_read_counts(variants, freq_thres, strands='+')
+  alleles_minus = get_read_counts(variants, freq_thres, strands='-')
+  alleles_plus_sorted  = sorted([base[0] for base in alleles_plus if base[1]])
+  alleles_minus_sorted = sorted([base[0] for base in alleles_minus if base[1]])
+
+  if alleles_plus_sorted == alleles_minus_sorted:
+    allele_count = len(alleles_plus)
+
+  return allele_count
 
 
 def fail(message):
