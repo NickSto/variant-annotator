@@ -2,21 +2,21 @@
 # This parses the output of Dan's "Naive Variant Detector" (previously,
 # "BAM Coverage"). It was forked from the code of "bam-coverage.py".
 #
-# New in this version: option to read from stdin
-#
-# TODO:
-# - test handling of -c 0 (and -f 0?)
-# - should it technically handle data lines that start with a '#'?
+# New in this version:
+#   Made header line customizable
+#     - separate from internal column labels, which are used as dict keys
 import os
 import sys
 from optparse import OptionParser
 
-COLUMNS = ['sample', 'chr', 'pos', 'A', 'C', 'G', 'T', 'coverage', 'alleles',
-  'major', 'minor', 'freq'] #, 'bias']
+COLUMNS = ['sample', 'chr', 'pos', 'A', 'C', 'G', 'T', 'coverage', 'alleles', 'major', 'minor', 'freq'] #, 'bias']
+COLUMN_LABELS = ['SAMPLE', 'CHR',  'POS', 'A', 'C', 'G', 'T', 'CVRG', 'ALLELES', 'MAJOR', 'MINOR', 'MINOR.FREQ.PERC.'] #, 'STRAND.BIAS']
 CANONICAL_VARIANTS = ['A', 'C', 'G', 'T']
-USAGE = 'Usage: %prog [options] variants.vcf > alleles.csv'
-OPT_DEFAULTS = {'freq_thres':1.0, 'covg_thres':100, 'print_header':False, 'stdin':False}
-DESCRIPTION = """This will parse the VCF output of Dan's "Naive Variant Caller" (aka "BAM Coverage") Galaxy tool. For each position reported, it counts the number of reads of each base, determines the major allele, minor allele (second most frequent variant), and number of alleles above a threshold. So currently it only considers SNVs (ACGT), including in the coverage figure. It prints to standard out."""
+USAGE = """Usage: cat variants.vcf | %prog [options] > alleles.csv
+       %prog [options] -i variants.vcf -o alleles.csv"""
+OPT_DEFAULTS = {'infile':'-', 'outfile':'-', 'freq_thres':1.0, 'covg_thres':100,
+  'print_header':False, 'stdin':False}
+DESCRIPTION = """This will parse the VCF output of Dan's "Naive Variant Caller" (aka "BAM Coverage") Galaxy tool. For each position reported, it counts the number of reads of each base, determines the major allele, minor allele (second most frequent variant), and number of alleles above a threshold. So currently it only considers SNVs (ACGT), including in the coverage figure. By default it reads from stdin and prints to stdout."""
 EPILOG = """Requirements:
 The input VCF must report the variants for each strand.
 The variants should be case-sensitive (e.g. all capital base letters).
@@ -28,6 +28,12 @@ def get_options(defaults, usage, description='', epilog=''):
 
   parser = OptionParser(usage=usage, description=description, epilog=epilog)
 
+  parser.add_option('-i', '--infile', dest='infile',
+    default=defaults.get('infile'),
+    help='Read input VCF data from this file instead of stdin.')
+  parser.add_option('-o', '--outfile', dest='outfile',
+    default=defaults.get('outfile'),
+    help='Print output data to this file instead of stdout.')
   parser.add_option('-f', '--freq-thres', dest='freq_thres', type='float',
     default=defaults.get('freq_thres'),
     help='Frequency threshold for counting alleles, given in percentage: -f 1 = 1% frequency. Default is %default%.')
@@ -37,9 +43,6 @@ def get_options(defaults, usage, description='', epilog=''):
   parser.add_option('-H', '--header', dest='print_header', action='store_const',
     const=not(defaults.get('print_header')), default=defaults.get('print_header'),
     help='Print header line. This is a #-commented line with the column labels. Off by default.')
-  parser.add_option('-i', '--stdin', dest='stdin', action='store_const',
-    const=not(defaults.get('stdin')), default=defaults.get('stdin'),
-    help='Read from standard input instead of a filename argument.')
   parser.add_option('-d', '--debug', dest='debug', action='store_true',
     default=False,
     help='Turn on debug mode. You must also specify a single site to process in a final argument using UCSC coordinate format.')
@@ -48,14 +51,6 @@ def get_options(defaults, usage, description='', epilog=''):
 
   # read in positional arguments
   arguments = {}
-  if not options.stdin:
-    if len(args) >= 1:
-      arguments['filename'] = args[0]
-      args.remove(args[0])
-    else:
-      parser.print_help()
-      fail("Error: Did not supply an input filename or use -i to read from "
-        +"standard input.")
   if options.debug:
     if len(args) >= 1:
       arguments['print_loc'] = args[0]
@@ -68,11 +63,11 @@ def main():
 
   (options, args) = get_options(OPT_DEFAULTS, USAGE, DESCRIPTION, EPILOG)
 
-  filename = args.get('filename')
+  infile = options.infile
+  outfile = options.outfile
   print_header = options.print_header
   freq_thres = options.freq_thres / 100.0
   covg_thres = options.covg_thres
-  stdin = options.stdin
   debug = options.debug
 
   if debug:
@@ -87,21 +82,33 @@ def main():
         +"Turning off debug mode.\n")
       debug = False
 
-  if print_header:
-    print '#'+'\t'.join(COLUMNS)
-
-  if stdin:
-    filehandle = sys.stdin
+  # set infile_handle to either stdin or the input file
+  if infile == OPT_DEFAULTS.get('infile'):
+    infile_handle = sys.stdin
     sys.stderr.write("Reading from standard input..\n")
   else:
-    if os.path.exists(filename):
-      filehandle = open(filename, 'r')
+    if os.path.exists(infile):
+      infile_handle = open(infile, 'r')
     else:
-      fail('Error: Input VCF file '+filename+' not found.')
+      fail('Error: Input VCF file '+infile+' not found.')
+
+  # set outfile_handle to either stdout or the output file
+  if outfile == OPT_DEFAULTS.get('outfile'):
+    outfile_handle = sys.stdout
+  else:
+    try:
+      outfile_handle = open(outfile, 'w')
+    except IOError, e:
+      fail('Error: The given output filename '+outfile+' could not be opened.')
+
+  if len(COLUMNS) != len(COLUMN_LABELS):
+    fail('Error: Internal column names do not match column labels.')
+  if print_header:
+    outfile_handle.write('#'+'\t'.join(COLUMN_LABELS)+"\n")
 
   # main loop: process and print one line at a time
   sample_names = []
-  for line in filehandle:
+  for line in infile_handle:
     line = line.rstrip('\r\n')
 
     # header lines
@@ -131,11 +138,16 @@ def main():
     if debug and site_summary[0]['print']:
       print line.split('\t')[9].split(':')[-1]
 
-    print_site(site_summary, COLUMNS)
+    print_site(outfile_handle, site_summary, COLUMNS)
 
-  if filehandle is not sys.stdin:
-    filehandle.close()
+  # close any open filehandles
+  if infile_handle is not sys.stdin:
+    infile_handle.close()
+  if outfile_handle is not sys.stdout:
+    outfile_handle.close()
 
+  # keeps Galaxy from giving an error if there were messages on stderr
+  sys.exit(0)
 
 
 
@@ -184,9 +196,9 @@ def read_site(line, sample_names, canonical):
         fail("Error in input VCF: variant data not strand-specific. "
           +"Failed on line:\n"+line)
       try:
-        variant_counts[variant] = int(reads)
+        variant_counts[variant] = int(float(reads))
       except ValueError, e:
-        continue
+        fail("Error in input VCF: Variant count not a valid number. Failed on variant count string '"+reads+"'\nIn the following line:\n"+line)
 
     sample_counts[sample_names[i]] = variant_counts
 
@@ -257,7 +269,7 @@ def summarize_site(site, sample_names, canonical, freq_thres, covg_thres,
       sample['major']  = '.'
     try:
       sample['minor']  = ranked_bases[1][0]
-      sample['freq']   = ranked_bases[1][1] / float(coverage)
+      sample['freq']   = round(ranked_bases[1][1]/float(coverage), 5)
     except IndexError, e:
       sample['minor']  = '.'
       sample['freq']   = 0.0
@@ -267,12 +279,13 @@ def summarize_site(site, sample_names, canonical, freq_thres, covg_thres,
   return site_summary
 
 
-def print_site(site, columns):
-  """Print the output lines for one site (one per sample)."""
+def print_site(filehandle, site, columns):
+  """Print the output lines for one site (one per sample).
+  filehandle must be open."""
   for sample in site:
     if sample['print']:
       fields = [str(sample.get(column)) for column in columns]
-      print '\t'.join(fields)
+      filehandle.write('\t'.join(fields)+"\n")
 
 
 def get_read_counts(variant_counts, freq_thres, strands='+-', debug=False):
