@@ -12,10 +12,10 @@ from optparse import OptionParser
 COLUMNS = ['sample', 'chr', 'pos', 'A', 'C', 'G', 'T', 'coverage', 'alleles', 'major', 'minor', 'freq'] #, 'bias']
 COLUMN_LABELS = ['SAMPLE', 'CHR',  'POS', 'A', 'C', 'G', 'T', 'CVRG', 'ALLELES', 'MAJOR', 'MINOR', 'MINOR.FREQ.PERC.'] #, 'STRAND.BIAS']
 CANONICAL_VARIANTS = ['A', 'C', 'G', 'T']
-USAGE = """Usage: cat variants.vcf | %prog [options] > alleles.csv
-       %prog [options] -i variants.vcf -o alleles.csv"""
+USAGE = """Usage: %prog [options] -i variants.vcf -o alleles.csv
+       cat variants.vcf | %prog [options] > alleles.csv"""
 OPT_DEFAULTS = {'infile':'-', 'outfile':'-', 'freq_thres':1.0, 'covg_thres':100,
-  'print_header':False, 'stdin':False}
+  'print_header':False, 'stdin':False, 'stranded':False}
 DESCRIPTION = """This will parse the VCF output of Dan's "Naive Variant Caller" (aka "BAM Coverage") Galaxy tool. For each position reported, it counts the number of reads of each base, determines the major allele, minor allele (second most frequent variant), and number of alleles above a threshold. So currently it only considers SNVs (ACGT), including in the coverage figure. By default it reads from stdin and prints to stdout."""
 EPILOG = """Requirements:
 The input VCF must report the variants for each strand.
@@ -36,16 +36,23 @@ def get_options(defaults, usage, description='', epilog=''):
     help='Print output data to this file instead of stdout.')
   parser.add_option('-f', '--freq-thres', dest='freq_thres', type='float',
     default=defaults.get('freq_thres'),
-    help='Frequency threshold for counting alleles, given in percentage: -f 1 = 1% frequency. Default is %default%.')
+    help=('Frequency threshold for counting alleles, given in percentage: -f 1 '
+      +'= 1% frequency. Default is %default%.'))
   parser.add_option('-c', '--covg-thres', dest='covg_thres', type='int',
     default=defaults.get('covg_thres'),
-    help='Coverage threshold. Each site must be supported by at least this many reads on each strand. Otherwise the site will not be printed in the output. The default is %default reads per strand.')
+    help=('Coverage threshold. Each site must be supported by at least this '
+      +'many reads on each strand. Otherwise the site will not be printed in '
+      +'the output. The default is %default reads per strand.'))
   parser.add_option('-H', '--header', dest='print_header', action='store_const',
     const=not(defaults.get('print_header')), default=defaults.get('print_header'),
-    help='Print header line. This is a #-commented line with the column labels. Off by default.')
-  parser.add_option('-d', '--debug', dest='debug', action='store_true',
-    default=False,
-    help='Turn on debug mode. You must also specify a single site to process in a final argument using UCSC coordinate format.')
+    help=('Print header line. This is a #-commented line with the column '
+      +'labels. Off by default.'))
+  parser.add_option('-s', '--stranded', dest='stranded', action='store_const',
+    const=not(defaults.get('stranded')), default=defaults.get('stranded'),
+    help='Report variant counts by strand, in separate columns. Off by default.')
+  parser.add_option('-d', '--debug', dest='debug', action='store_true', default=False,
+    help=('Turn on debug mode. You must also specify a single site to process '
+      +'in a final argument using UCSC coordinate format.'))
 
   (options, args) = parser.parse_args()
 
@@ -68,6 +75,7 @@ def main():
   print_header = options.print_header
   freq_thres = options.freq_thres / 100.0
   covg_thres = options.covg_thres
+  stranded = options.stranded
   debug = options.debug
 
   if debug:
@@ -133,7 +141,7 @@ def main():
         pass  # No chr specified. Just go ahead and print the line.
 
     site_summary = summarize_site(site_data, sample_names, CANONICAL_VARIANTS,
-      freq_thres, covg_thres, debug=debug)
+      freq_thres, covg_thres, stranded, debug=debug)
 
     if debug and site_summary[0]['print']:
       print line.split('\t')[9].split(':')[-1]
@@ -154,8 +162,27 @@ def main():
 def read_site(line, sample_names, canonical):
   """Read in a line, parse the variants into a data structure, and return it.
   The line should be actual site data, not a header line, so check beforehand.
-  Notes:
-  - The line is assumed to have been chomped."""
+  Only the variants in 'canonical' will be read; all others are ignored.
+  Note: the line is assumed to have been chomped.
+  The returned data is stored in a dict, with the following structure:
+  {
+    'chr': 'chr1',
+    'pos': '2617',
+    'samples': {
+      'THYROID': {
+        '+A': 32,
+        '-A': 45,
+        '-G': 1,
+      },
+      'BLOOD': {
+        '+A': 2,
+        '-C': 1,
+        '+G': 37,
+        '-G': 42,
+      },
+    },
+  }
+  """
   
   site = {}
   fields = line.split('\t')
@@ -208,7 +235,7 @@ def read_site(line, sample_names, canonical):
 
 
 def summarize_site(site, sample_names, canonical, freq_thres, covg_thres,
-  debug=False):
+  stranded=False, debug=False):
   """Take the raw data from the VCF line and transform it into the summary data
   to be printed in the output format."""
 
@@ -243,7 +270,7 @@ def summarize_site(site, sample_names, canonical, freq_thres, covg_thres,
       sample['print'] = True
 
     # get an ordered list of read counts for all variants (either strand)
-    ranked_bases = get_read_counts(variants, 0, strands='+-', debug=debug)
+    ranked_bases = get_read_counts_filt(variants, 0, strands='+-', debug=debug)
 
     # record read counts into dict for this sample
     for base in ranked_bases:
@@ -288,16 +315,13 @@ def print_site(filehandle, site, columns):
       filehandle.write('\t'.join(fields)+"\n")
 
 
-def get_read_counts(variant_counts, freq_thres, strands='+-', debug=False):
+def get_read_counts_filt(variant_counts, freq_thres, strands='+-', debug=False):
   """Count the number of reads for each base, and create a ranked list of
   alleles passing the frequency threshold.
       Arguments:
   variant_counts: Dict of the stranded variants (keys) and their read counts (values).
   freq_thres: The frequency threshold each allele needs to pass to be included.
   strands: Which strand(s) to count. Can be '+', '-', or '+-' for both (default).
-  variants: A list of the variants of interest. Other types of variants will not
-    be included in the returned list. If no list is given, all variants found in
-    the variant_counts will be used.
       Return value:
   ranked_bases: A list of the alleles and their read counts. The elements are
     tuples (base, read count). The alleles are listed in descending order of
@@ -342,6 +366,23 @@ def get_read_counts(variant_counts, freq_thres, strands='+-', debug=False):
   return ranked_bases
 
 
+def get_read_counts(variant_counts, strands="+-"):
+  """A simpler method for summing the counts per base, without filtering or
+  ordering. Arguments and return value are same as for get_read_counts() (but
+  fewer)."""
+
+  variants = variant_counts.keys()
+
+  summed_counts = {}
+  for variant in variants:
+    strand = variant[0]
+    base = variant[1:]
+    if strand in strands:
+      summed_counts[base] = variant_counts[variant] + summed_counts.get(base, 0)
+
+  return summed_counts.items()
+
+
 def count_alleles(variant_counts, freq_thres, debug=False):
   """Determine how many alleles to report, based on filtering rules.
   The current rule determines which bases pass the frequency threshold on each
@@ -350,10 +391,10 @@ def count_alleles(variant_counts, freq_thres, debug=False):
   is zero."""
   allele_count = 0
 
-  alleles_plus  = get_read_counts(variant_counts, freq_thres, debug=debug,
-    strands='+')
-  alleles_minus = get_read_counts(variant_counts, freq_thres, debug=debug,
-    strands='-')
+  alleles_plus  = get_read_counts_filt(variant_counts, freq_thres, strands='+'
+    debug=debug,)
+  alleles_minus = get_read_counts_filt(variant_counts, freq_thres, strands='-'
+    debug=debug,)
 
   if debug:
     print '+ '+str(alleles_plus)
