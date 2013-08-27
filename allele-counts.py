@@ -270,7 +270,8 @@ def summarize_site(site, sample_names, canonical, freq_thres, covg_thres,
       sample['print'] = True
 
     # get an ordered list of read counts for all variants (either strand)
-    ranked_bases = get_read_counts_filt(variants, 0, strands='+-', debug=debug)
+    ranked_bases = process_read_counts(variants, 0, strands='+-', ordered=True,
+      debug=debug)
 
     # record read counts into dict for this sample
     for base in ranked_bases:
@@ -315,61 +316,50 @@ def print_site(filehandle, site, columns):
       filehandle.write('\t'.join(fields)+"\n")
 
 
-def get_read_counts_filt(variant_counts, freq_thres, strands='+-', debug=False):
-  """Count the number of reads for each base, and create a ranked list of
-  alleles passing the frequency threshold.
+def process_read_counts(variant_counts, freq_thres, strands='+-', ordered=False,
+    debug=False):
+  """Count the number of reads for each base, and create a list of alleles
+  passing the frequency threshold.
       Arguments:
   variant_counts: Dict of the stranded variants (keys) and their read counts (values).
   freq_thres: The frequency threshold each allele needs to pass to be included.
   strands: Which strand(s) to count. Can be '+', '-', or '+-' for both (default).
+  ordered: Whether to sort the list in descending order of read counts.
       Return value:
-  ranked_bases: A list of the alleles and their read counts. The elements are
-    tuples (base, read count). The alleles are listed in descending order of
-    frequency, and only those passing the threshold are included."""
+  base_counts: A list of the alleles and their read counts. The elements are
+    tuples (base, read count)."""
 
-  # Get list of all variants from variant_counts list
-  variants = [variant[1:] for variant in variant_counts]
-  # deduplicate via a dict
-  variant_dict = dict((variant, 1) for variant in variants)
-  variants = variant_dict.keys()
-
-  ranked_bases = []
-  for variant in variants:
-    reads = 0
-    for strand in strands:
-      reads += variant_counts.get(strand+variant, 0)
-    ranked_bases.append((variant, reads))
+  base_counts = get_read_counts(variant_counts, strands)
 
   # get coverage for the specified strands
   coverage = 0
-  for variant in variant_counts:
-    if variant[0] in strands:
-      coverage += variant_counts.get(variant, 0)
-  # if debug: print "strands: "+strands+', covg: '+str(coverage)
+  for base in base_counts:
+    coverage += base[1]
 
-  if coverage < 1:
+  if coverage <= 0:
     return []
 
   # sort the list of alleles by read count
-  ranked_bases.sort(reverse=True, key=lambda base: base[1])
+  if ordered:
+    base_counts.sort(reverse=True, key=lambda base: base[1])
 
   if debug:
     print strands+' coverage: '+str(coverage)+', freq_thres: '+str(freq_thres)
-    for base in ranked_bases:
+    for base in base_counts:
       print (base[0]+': '+str(base[1])+'/'+str(float(coverage))+' = '+
         str(base[1]/float(coverage)))
 
   # remove bases below the frequency threshold
-  ranked_bases = [base for base in ranked_bases
+  base_counts = [base for base in base_counts
     if base[1]/float(coverage) >= freq_thres]
 
-  return ranked_bases
+  return base_counts
 
 
 def get_read_counts(variant_counts, strands="+-"):
-  """A simpler method for summing the counts per base, without filtering or
-  ordering. Arguments and return value are same as for get_read_counts() (but
-  fewer)."""
+  """Do a simple sum of the read counts per variant, on the specified strands.
+  The meaning of the arguments and return value are the same as in
+  process_read_counts()."""
 
   variants = variant_counts.keys()
 
@@ -391,16 +381,17 @@ def count_alleles(variant_counts, freq_thres, debug=False):
   is zero."""
   allele_count = 0
 
-  alleles_plus  = get_read_counts_filt(variant_counts, freq_thres, strands='+'
-    debug=debug,)
-  alleles_minus = get_read_counts_filt(variant_counts, freq_thres, strands='-'
-    debug=debug,)
+  alleles_plus  = process_read_counts(variant_counts, freq_thres, strands='+',
+    ordered=False, debug=debug)
+  alleles_minus = process_read_counts(variant_counts, freq_thres, strands='-',
+    ordered=False, debug=debug)
 
   if debug:
     print '+ '+str(alleles_plus)
     print '- '+str(alleles_minus)
 
-  # check if each strand reports the same set of alleles
+  # Check if each strand reports the same set of alleles.
+  # Sorting by base is to compare lists without regard to order (as sets).
   alleles_plus_sorted  = sorted([base[0] for base in alleles_plus if base[1]])
   alleles_minus_sorted = sorted([base[0] for base in alleles_minus if base[1]])
   if alleles_plus_sorted == alleles_minus_sorted:
@@ -413,5 +404,18 @@ def fail(message):
   sys.stderr.write(message+'\n')
   sys.exit(1)
 
+
+def test():
+  inputs = [
+    {'+A':15, '+G':1,'-A':15, '-G':1},
+    {'+A':13, '+G':7,'-A':93, '-G':7},
+    {'+d1':10,'+G':2,'-d1':11,'-G':2},
+  ]
+
+  for input in inputs:
+    print get_read_counts(input, '+-')
+    print process_read_counts(input, 0, '+-')
+
 if __name__ == "__main__":
-  main()
+  # main()
+  test()
