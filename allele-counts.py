@@ -269,9 +269,9 @@ def summarize_site(site, sample_names, canonical, freq_thres, covg_thres,
     else:
       sample['print'] = True
 
-    # get an ordered list of read counts for all variants (either strand)
-    ranked_bases = process_read_counts(variants, 0, strands='+-', ordered=True,
-      debug=debug)
+    # get an ordered list of read counts for all variants (both strands)
+    bases = get_read_counts(variants, '+-')
+    ranked_bases = process_read_counts(bases, sort=True, debug=debug)
 
     # record read counts into dict for this sample
     for base in ranked_bases:
@@ -281,7 +281,7 @@ def summarize_site(site, sample_names, canonical, freq_thres, covg_thres,
       if not sample.has_key(variant):
         sample[variant] = 0
 
-    sample['alleles']  = count_alleles(variants, freq_thres, debug=debug)
+    sample['alleles'] = count_alleles(variants, freq_thres, debug=debug)
 
     # set minor allele to N if there's a tie for 2nd
     if len(ranked_bases) >= 3 and ranked_bases[1][1] == ranked_bases[2][1]:
@@ -316,59 +316,61 @@ def print_site(filehandle, site, columns):
       filehandle.write('\t'.join(fields)+"\n")
 
 
-def process_read_counts(variant_counts, freq_thres, strands='+-', ordered=False,
-    debug=False):
-  """Count the number of reads for each base, and create a list of alleles
-  passing the frequency threshold.
+def process_read_counts(variant_counts, freq_thres=0, sort=False, debug=False):
+  """Process a list of read counts by frequency filtering and/or sorting.
       Arguments:
-  variant_counts: Dict of the stranded variants (keys) and their read counts (values).
+  variant_counts: List of the non-stranded variants and their read counts. The
+    elements are tuples (variant, read count).
   freq_thres: The frequency threshold each allele needs to pass to be included.
-  strands: Which strand(s) to count. Can be '+', '-', or '+-' for both (default).
-  ordered: Whether to sort the list in descending order of read counts.
+  sort: Whether to sort the list in descending order of read counts.
       Return value:
-  base_counts: A list of the alleles and their read counts. The elements are
-    tuples (base, read count)."""
-
-  base_counts = get_read_counts(variant_counts, strands)
+  variant_counts: A list of the processed alleles and their read counts. The
+    elements are tuples (variant, read count)."""
 
   # get coverage for the specified strands
   coverage = 0
-  for base in base_counts:
-    coverage += base[1]
+  for variant in variant_counts:
+    coverage += variant[1]
 
   if coverage <= 0:
     return []
 
   # sort the list of alleles by read count
-  if ordered:
-    base_counts.sort(reverse=True, key=lambda base: base[1])
+  if sort:
+    variant_counts.sort(reverse=True, key=lambda variant: variant[1])
 
   if debug:
-    print strands+' coverage: '+str(coverage)+', freq_thres: '+str(freq_thres)
-    for base in base_counts:
-      print (base[0]+': '+str(base[1])+'/'+str(float(coverage))+' = '+
-        str(base[1]/float(coverage)))
+    print 'coverage: '+str(coverage)+', freq_thres: '+str(freq_thres)
+    for variant in variant_counts:
+      print (variant[0]+': '+str(variant[1])+'/'+str(float(coverage))+' = '+
+        str(variant[1]/float(coverage)))
 
   # remove bases below the frequency threshold
-  base_counts = [base for base in base_counts
-    if base[1]/float(coverage) >= freq_thres]
+  if freq_thres > 0:
+    variant_counts = [variant for variant in variant_counts
+      if variant[1]/float(coverage) >= freq_thres]
 
-  return base_counts
+  return variant_counts
 
 
-def get_read_counts(variant_counts, strands="+-"):
+def get_read_counts(stranded_counts, strands="+-"):
   """Do a simple sum of the read counts per variant, on the specified strands.
-  The meaning of the arguments and return value are the same as in
-  process_read_counts()."""
+      Arguments:
+  stranded_counts: Dict of the stranded variants (keys) and their read counts
+    (values).
+  strands: Which strand(s) to count. Can be '+', '-', or '+-' for both (default).
+      Return value:
+  summed_counts: A list of the alleles and their read counts. The elements are
+    tuples (variant, read count)."""
 
-  variants = variant_counts.keys()
+  variants = stranded_counts.keys()
 
   summed_counts = {}
   for variant in variants:
     strand = variant[0]
     base = variant[1:]
     if strand in strands:
-      summed_counts[base] = variant_counts[variant] + summed_counts.get(base, 0)
+      summed_counts[base] = stranded_counts[variant] + summed_counts.get(base, 0)
 
   return summed_counts.items()
 
@@ -381,10 +383,12 @@ def count_alleles(variant_counts, freq_thres, debug=False):
   is zero."""
   allele_count = 0
 
-  alleles_plus  = process_read_counts(variant_counts, freq_thres, strands='+',
-    ordered=False, debug=debug)
-  alleles_minus = process_read_counts(variant_counts, freq_thres, strands='-',
-    ordered=False, debug=debug)
+  alleles_plus  = get_read_counts(variant_counts, '+')
+  alleles_plus  = process_read_counts(alleles_plus, freq_thres=freq_thres,
+    sort=False, debug=debug)
+  alleles_minus = get_read_counts(variant_counts, '-')
+  alleles_minus = process_read_counts(alleles_minus, freq_thres=freq_thres,
+    sort=False, debug=debug)
 
   if debug:
     print '+ '+str(alleles_plus)
@@ -413,9 +417,10 @@ def test():
   ]
 
   for input in inputs:
-    print get_read_counts(input, '+-')
-    print process_read_counts(input, 0, '+-')
+    counts = get_read_counts(input, '+-')
+    print process_read_counts(counts, sort=True)
+    print old_read_counts(input, 0, strands='+-')
 
 if __name__ == "__main__":
-  # main()
-  test()
+  main()
+  # test()
