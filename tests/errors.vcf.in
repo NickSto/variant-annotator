@@ -1,4 +1,5 @@
 ##fileformat=VCFv4.1
+##comment="ARGS=-f 10 -c 10"
 ##comment="This is a test set of made-up sites, each created in order to test a certain type of error handling. It's meant to be run with -f 10 -c 10"
 ##fileDate=19700101
 ##source=Dan
