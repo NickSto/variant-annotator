@@ -1,0 +1,21 @@
+##fileformat=VCFv4.1
+##comment="This is a test set of made-up sites, each created in order to test a certain type of error handling. It's meant to be run with -f 10 -c 10"
+##fileDate=19700101
+##source=Dan
+##reference=file:///scratch/dan/galaxy/galaxy-central/database/files/002/dataset_0000.dat
+##INFO=<ID=AC,Number=A,Type=Integer,Description="Allele count in genotypes, for each ALT allele, in the same order as listed">
+##INFO=<ID=AF,Number=A,Type=Float,Description="Allele Frequency, for each ALT allele, in the same order as listed">
+##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">
+##FORMAT=<ID=AC,Number=.,Type=Integer,Description="Allele count in genotypes, for each ALT allele, in the same order as listed">
+##FORMAT=<ID=AF,Number=.,Type=Float,Description="Allele Frequency, for each ALT allele, in the same order as listed">
+##FORMAT=<ID=NC,Number=.,Type=String,Description="Nucleotide and indel counts">
+#CHROM	POS	ID	REF	ALT	QUAL	FILTER	INFO	FORMAT	THYROID
+# Comma omissions
+chr1	0	.	A	.	.	.	AC=;AF=	GT:AC:AF:NC	0/0:1:1:+A=15,-A=15,
+chr1	0	.	A	.	.	.	AC=;AF=	GT:AC:AF:NC	0/0:1:1:+A=15,-A=15
+chr1	0	.	A	.	.	.	AC=;AF=	GT:AC:AF:NC	0/0:1:1:+A=15-A=15,
+chr1	0	.	A	.	.	.	AC=;AF=	GT:AC:AF:NC	0/0:1:1:+A=15,+G=1,+C=1,-A=15,-G=1,
+chr1	0	.	A	.	.	.	AC=;AF=	GT:AC:AF:NC	0/0:1:1:+A=15,+G=1+C=1,-A=15,-G=1,
+# Wrong number of sample columns
+chr1	0	.	A	.	.	.	AC=;AF=	GT:AC:AF:NC	0/0:1:1:+A=15,-A=15,	0/0:1:1:+A=15,-A=15,
+chr1	0	.	A	.	.	.	AC=;AF=	GT:AC:AF:NC

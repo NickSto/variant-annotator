@@ -1,0 +1,22 @@
+##fileformat=VCFv4.1
+##comment="This is a test set of made-up sites, in this case to test the handling of multiple read groups. It's meant to be run with -f 10 -c 10"
+##fileDate=19700101
+##source=Dan
+##reference=file:///scratch/dan/galaxy/galaxy-central/database/files/002/dataset_0000.dat
+##INFO=<ID=AC,Number=A,Type=Integer,Description="Allele count in genotypes, for each ALT allele, in the same order as listed">
+##INFO=<ID=AF,Number=A,Type=Float,Description="Allele Frequency, for each ALT allele, in the same order as listed">
+##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">
+##FORMAT=<ID=AC,Number=.,Type=Integer,Description="Allele count in genotypes, for each ALT allele, in the same order as listed">
+##FORMAT=<ID=AF,Number=.,Type=Float,Description="Allele Frequency, for each ALT allele, in the same order as listed">
+##FORMAT=<ID=NC,Number=.,Type=String,Description="Nucleotide and indel counts">
+#CHROM	POS	ID	REF	ALT	QUAL	FILTER	INFO	FORMAT	BRAIN	ARTERY	THYROID
+# naive case
+chr1	0	.	A	G,C	.	.	AC=;AF=	GT:AC:AF:NC	0/0:1:1:+A=15,-A=15,	0/0:1:1:+G=15,-G=15,	0/0:1:1:+C=15,-C=15,
+# cases all with one allele, but different minor allele numbers below threshold
+chr1	10	.	A	G	.	.	AC=;AF=	GT:AC:AF:NC	0/0:1:1:+A=15,-A=15,	0/0:1:1:+A=15,+G=1,-A=15,-G=1,	0/0:1:1:+A=15,+G=1,-A=16,
+# cases with different numbers of alleles
+chr1	20	.	A	G	.	.	AC=;AF=	GT:AC:AF:NC	0/0:1:1:+A=15,+G=1,-A=15,-G=1,	0/0:1:1:+A=17,+G=3,-A=17,-G=3,	0/0:1:1:+A=15,+G=2,-A=15,
+# cases where some shouldn't be printed
+chr1	30	.	A	G	.	.	AC=;AF=	GT:AC:AF:NC	0/0:1:1:+A=15,-A=15,	0/0:1:1:+A=9,-A=8,	0/0:1:1:+A=15,-A=9,
+# cases with some complex pre-':' data
+chr1	40	.	T	A,G,C	.	.	AC=1,1;AF=0.0111111111111,0.0111111111111	GT:AC:AF:NC	0/0:1:1:+T=15,-T=15,	0/0:1,1:0.0111111111111,0.0111111111111:+A=1,+T=81,-T=16,-G=2,	0/0:3,1:0.0394736842105,0.0131578947368:+C=52,+T=30,-C=17,-T=1,

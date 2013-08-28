@@ -1,0 +1,71 @@
+##fileformat=VCFv4.1
+##comment="This is a test set of made-up sites, each created in order to test certain functionality. It's meant to be run with -f 10 -c 10"
+##fileDate=19700101
+##source=Dan
+##reference=file:///scratch/dan/galaxy/galaxy-central/database/files/002/dataset_0000.dat
+##INFO=<ID=AC,Number=A,Type=Integer,Description="Allele count in genotypes, for each ALT allele, in the same order as listed">
+##INFO=<ID=AF,Number=A,Type=Float,Description="Allele Frequency, for each ALT allele, in the same order as listed">
+##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">
+##FORMAT=<ID=AC,Number=.,Type=Integer,Description="Allele count in genotypes, for each ALT allele, in the same order as listed">
+##FORMAT=<ID=AF,Number=.,Type=Float,Description="Allele Frequency, for each ALT allele, in the same order as listed">
+##FORMAT=<ID=NC,Number=.,Type=String,Description="Nucleotide and indel counts">
+#CHROM	POS	ID	REF	ALT	QUAL	FILTER	INFO	FORMAT	THYROID
+# General note: the only data made consistent is the CHROM, POS, REF, ALT, and the variant data (after the ':'). The other stuff isn't supposed to be consistent.
+# Simplest case, but POS 0 and no minor allele
+chr1	0	.	A	.	.	.	AC=;AF=	GT:AC:AF:NC	0/0:1:1:+A=15,-A=15,
+# Simple, normal cases of A/G variants: above/below threshold x strand bias/no strand bias (2 x 2 = 4 cases)
+chr1	10	.	A	G	.	.	AC=;AF=	GT:AC:AF:NC	0/0:1:1:+A=15,+G=1,-A=15,-G=1,
+chr1	20	.	A	G	.	.	AC=;AF=	GT:AC:AF:NC	0/0:1:1:+A=15,+G=1,-A=16,
+chr1	30	.	A	G	.	.	AC=;AF=	GT:AC:AF:NC	0/0:1:1:+A=10,+G=2,-A=11,-G=2,
+chr1	40	.	A	G	.	.	AC=;AF=	GT:AC:AF:NC	0/0:1:1:+A=11,+G=3,-A=11,
+# Same 4 cases, but with minor allele = N
+chr1	50	.	A	N	.	.	AC=;AF=	GT:AC:AF:NC	0/0:1:1:+A=15,+N=1,-A=15,-N=1,
+chr1	60	.	A	N	.	.	AC=;AF=	GT:AC:AF:NC	0/0:1:1:+A=15,+N=1,-A=16,
+chr1	70	.	A	N	.	.	AC=;AF=	GT:AC:AF:NC	0/0:1:1:+A=10,+N=2,-A=11,-N=2,
+chr1	80	.	A	N	.	.	AC=;AF=	GT:AC:AF:NC	0/0:1:1:+A=11,+N=3,-A=11,
+# Same 4 cases, but with an additional noncanonical minor allele d1
+chr1	82	.	A	d1	.	.	AC=;AF=	GT:AC:AF:NC	0/0:1:1:+A=15,+G=1,+d1=1,-A=15,-G=1,-d1=1,
+chr1	84	.	A	d1	.	.	AC=;AF=	GT:AC:AF:NC	0/0:1:1:+A=15,+G=1,+d1=1,-A=16,
+chr1	86	.	A	d1	.	.	AC=;AF=	GT:AC:AF:NC	0/0:1:1:+A=10,+G=2,+d1=1,-A=11,-G=2,-d1=1,
+chr1	88	.	A	d1	.	.	AC=;AF=	GT:AC:AF:NC	0/0:1:1:+A=11,+G=3,+d1=1,-A=11,
+# Same 4 cases, but with minor allele = d1 (non-canonical)
+chr1	90	.	A	d1	.	.	AC=;AF=	GT:AC:AF:NC	0/0:1:1:+A=15,+d1=1,-A=15,-d1=1,
+chr1	100	.	A	d1	.	.	AC=;AF=	GT:AC:AF:NC	0/0:1:1:+A=15,+d1=1,-A=16,
+chr1	110	.	A	d1	.	.	AC=;AF=	GT:AC:AF:NC	0/0:1:1:+A=10,+d1=2,-A=11,-d1=2,
+chr1	120	.	A	d1	.	.	AC=;AF=	GT:AC:AF:NC	0/0:1:1:+A=11,+d1=3,-A=11,
+# Same 4 cases, but with MAJOR allele = d1
+chr1	130	.	d1	G	.	.	AC=;AF=	GT:AC:AF:NC	0/0:1:1:+d1=15,+G=1,-d1=15,-G=1,
+chr1	140	.	d1	G	.	.	AC=;AF=	GT:AC:AF:NC	0/0:1:1:+d1=15,+G=1,-d1=16,
+chr1	150	.	d1	G	.	.	AC=;AF=	GT:AC:AF:NC	0/0:1:1:+d1=10,+G=2,-d1=11,-G=2,
+chr1	160	.	d1	G	.	.	AC=;AF=	GT:AC:AF:NC	0/0:1:1:+d1=11,+G=3,-d1=11,
+# Test edge cases where freq == freq_thres and/or covg == covg_thres
+chr1	200	.	A	.	.	.	AC=;AF=	GT:AC:AF:NC	0/0:1:1:+A=9,-A=9,
+chr1	210	.	A	.	.	.	AC=;AF=	GT:AC:AF:NC	0/0:1:1:+A=10,-A=10,
+chr1	220	.	A	.	.	.	AC=;AF=	GT:AC:AF:NC	0/0:1:1:+A=11,-A=11,
+chr1	230	.	A	G	.	.	AC=;AF=	GT:AC:AF:NC	0/0:1:1:+A=91,+G=9,-A=91,-G=9,
+chr1	240	.	A	G	.	.	AC=;AF=	GT:AC:AF:NC	0/0:1:1:+A=90,+G=10,-A=90,-G=10,
+chr1	250	.	A	G	.	.	AC=;AF=	GT:AC:AF:NC	0/0:1:1:+A=89,+G=11,-A=89,-G=11,
+# Test case where minor allele is above threshold on only one strand because of different coverage. Also, a long decimal minor allele frequency.
+chr1	260	.	A	G	.	.	AC=;AF=	GT:AC:AF:NC	0/0:1:1:+A=13,+G=7,-A=93,-G=7,
+# Test case where minor alleles have equal frequency: Above/below threshold, +/- strand bias
+chr1	300	.	T	G,A	.	.	AC=;AF=	GT:AC:AF:NC	0/0:1:1:+A=1,+G=1,+T=38,-A=1,-G=1,-T=38,
+chr1	310	.	T	G,A	.	.	AC=;AF=	GT:AC:AF:NC	0/0:1:1:+A=6,+G=6,+T=38,-A=6,-G=6,-T=38,
+chr1	320	.	T	G,A	.	.	AC=;AF=	GT:AC:AF:NC	0/0:1:1:+A=6,+G=6,+T=38,-A=6,-G=6,-T=18,
+chr1	330	.	T	G,A	.	.	AC=;AF=	GT:AC:AF:NC	0/0:1:1:+A=6,+G=6,+T=38,-A=1,-G=1,-T=28,
+chr1	340	.	T	G,A	.	.	AC=;AF=	GT:AC:AF:NC	0/0:1:1:+A=1,+T=80,-G=1,-T=18,
+chr1	350	.	T	G,A	.	.	AC=;AF=	GT:AC:AF:NC	0/0:1:1:+A=11,+T=60,-G=11,-T=18,
+# Case where + and - variants are interleaved with each other. Also, a long decimal result for the minor allele frequency.
+chr1	400	.	A	N	.	.	AC=;AF=	GT:AC:AF:NC	0/0:1:1:+A=16,-A=16,+G=4,-G=4,
+# Test complex data in the ALT, INFO, and sample (before the ':') columns
+chr1	410	.	T	G,A	.	.	AC=1,1;AF=0.0111111111111,0.0111111111111	GT:AC:AF:NC	0/0:1,1:0.0111111111111,0.0111111111111:+A=1,+T=81,-T=16,-G=2,
+chr1	420	.	A	.	.	.	AC=;AF=	GT:AC:AF:NC	0/0:::+A=82,-A=22,
+# Test some other types of noncanonical variants (tie for 2nd and not)
+chr1	430	.	A	N,GAA,d2	.	.	AC=;AF=	GT:AC:AF:NC	0/0:1:1:+A=15,+N=1,+d2=1,-A=15,-GAA=2
+chr1	440	.	A	N,GAA,d2	.	.	AC=;AF=	GT:AC:AF:NC	0/0:1:1:+A=15,+N=1,+d2=1,-A=15,-GAA=1
+# No canonical variants present
+chr1	450	.	A	d1	.	.	AC=;AF=	GT:AC:AF:NC	0/0:1:1:+d1=15,-d1=20,
+chr1	460	.	A	d1,N	.	.	AC=;AF=	GT:AC:AF:NC	0/0:1:1:+d1=15,+N=2,-d1=20,-N=2,
+# Catch some divide by zero errors
+chr1	470	.	A	.	.	.	AC=;AF=	GT:AC:AF:NC	0/0:1:1:+A=0,
+# Test an unusual CHROM value and a long POS value
+27	1234567890	.	A	N	.	.	AC=;AF=	GT:AC:AF:NC	0/0:1:1:+A=15,+N=1,-A=14,
