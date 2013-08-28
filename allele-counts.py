@@ -109,8 +109,12 @@ def main():
     except IOError, e:
       fail('Error: The given output filename '+outfile+' could not be opened.')
 
+  # Take care of column names, print header
   if len(COLUMNS) != len(COLUMN_LABELS):
-    fail('Error: Internal column names do not match column labels.')
+    fail('Error: Internal column names list do not match column labels list.')
+  if stranded:
+    COLUMNS[3:7]       = ['+A', '+C', '+G', '+T', '-A', '-C', '-G', '-T']
+    COLUMN_LABELS[3:7] = ['+A', '+C', '+G', '+T', '-A', '-C', '-G', '-T']
   if print_header:
     outfile_handle.write('#'+'\t'.join(COLUMN_LABELS)+"\n")
 
@@ -273,13 +277,27 @@ def summarize_site(site, sample_names, canonical, freq_thres, covg_thres,
     bases = get_read_counts(variants, '+-')
     ranked_bases = process_read_counts(bases, sort=True, debug=debug)
 
-    # record read counts into dict for this sample
-    for base in ranked_bases:
-      sample[base[0]] = base[1]
-    # fill in any zeros
-    for variant in canonical:
-      if not sample.has_key(variant):
-        sample[variant] = 0
+    # prepare stranded or unstranded lists of base counts
+    base_count_lists = []
+    if stranded:
+      strands = ['+', '-']
+      base_count_lists.append(get_read_counts(variants, '+'))
+      base_count_lists.append(get_read_counts(variants, '-'))
+    else:
+      strands = ['']
+      base_count_lists.append(ranked_bases)
+
+    # record read counts into output dict
+    # If stranded, this will loop twice, once for each strand, and prepend '+'
+    # or '-' to the base name. If not stranded, it will loop once, and prepend
+    # nothing ('').
+    for (strand, base_count_list) in zip(strands, base_count_lists):
+      for base_count in base_count_list:
+        sample[strand+base_count[0]] = base_count[1]
+      # fill in any zeros
+      for base in canonical:
+        if not sample.has_key(strand+base):
+          sample[strand+base] = 0
 
     sample['alleles'] = count_alleles(variants, freq_thres, debug=debug)
 
@@ -314,6 +332,28 @@ def print_site(filehandle, site, columns):
     if sample['print']:
       fields = [str(sample.get(column)) for column in columns]
       filehandle.write('\t'.join(fields)+"\n")
+
+
+def get_read_counts(stranded_counts, strands="+-"):
+  """Do a simple sum of the read counts per variant, on the specified strands.
+      Arguments:
+  stranded_counts: Dict of the stranded variants (keys) and their read counts
+    (values).
+  strands: Which strand(s) to count. Can be '+', '-', or '+-' for both (default).
+      Return value:
+  summed_counts: A list of the alleles and their read counts. The elements are
+    tuples (variant, read count)."""
+
+  variants = stranded_counts.keys()
+
+  summed_counts = {}
+  for variant in variants:
+    strand = variant[0]
+    base = variant[1:]
+    if strand in strands:
+      summed_counts[base] = stranded_counts[variant] + summed_counts.get(base, 0)
+
+  return summed_counts.items()
 
 
 def process_read_counts(variant_counts, freq_thres=0, sort=False, debug=False):
@@ -351,28 +391,6 @@ def process_read_counts(variant_counts, freq_thres=0, sort=False, debug=False):
       if variant[1]/float(coverage) >= freq_thres]
 
   return variant_counts
-
-
-def get_read_counts(stranded_counts, strands="+-"):
-  """Do a simple sum of the read counts per variant, on the specified strands.
-      Arguments:
-  stranded_counts: Dict of the stranded variants (keys) and their read counts
-    (values).
-  strands: Which strand(s) to count. Can be '+', '-', or '+-' for both (default).
-      Return value:
-  summed_counts: A list of the alleles and their read counts. The elements are
-    tuples (variant, read count)."""
-
-  variants = stranded_counts.keys()
-
-  summed_counts = {}
-  for variant in variants:
-    strand = variant[0]
-    base = variant[1:]
-    if strand in strands:
-      summed_counts[base] = stranded_counts[variant] + summed_counts.get(base, 0)
-
-  return summed_counts.items()
 
 
 def count_alleles(variant_counts, freq_thres, debug=False):
