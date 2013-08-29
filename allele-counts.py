@@ -118,7 +118,10 @@ def main():
   if print_header:
     outfile_handle.write('#'+'\t'.join(COLUMN_LABELS)+"\n")
 
-  # main loop: process and print one line at a time
+  # main loop
+  # each iteration processes one VCF line and prints one or more output lines
+  # one VCF line    = one site, one or more samples
+  # one output line = one site, one sample
   sample_names = []
   for line in infile_handle:
     line = line.rstrip('\r\n')

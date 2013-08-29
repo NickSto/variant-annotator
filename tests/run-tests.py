@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 import os
+import sys
 import subprocess
 
 DATASETS = ['artificial', 'artificial-samples', 'real']
@@ -9,16 +10,26 @@ ARGS_KEY = '##comment="ARGS='
 
 def main():
 
+  test_dir = os.path.dirname(os.path.relpath(sys.argv[0]))
+  print test_dir
+
   for dataset in DATASETS:
-    infile  = dataset+IN_EXT
-    outfile = dataset+OUT_EXT
+    infile  = test_dir+os.sep+dataset+IN_EXT
+    outfile = test_dir+os.sep+dataset+OUT_EXT
+
+    if not os.path.exists(infile):
+      sys.stderr.write("Error: file not found: "+infile)
+      continue
+    if not os.path.exists(outfile):
+      sys.stderr.write("Error: file not found: "+outfile)
+      continue
 
     options = read_options(infile)
-    bash_cmd = 'diff '+outfile+' <(allele-counts.py -i '+infile+' '+options+')'
-    dash_cmd = "bash -c '"+bash_cmd+"'"
+    script_cmd = 'allele-counts.py '+options+' -i '+infile
+    bash_cmd = 'diff '+outfile+' <('+script_cmd+')'
     # print infile+":"
-    print bash_cmd
-    subprocess.call(dash_cmd, shell=True)
+    print script_cmd
+    subprocess.call(['bash', '-c', bash_cmd])
 
 
 def read_options(infile):
