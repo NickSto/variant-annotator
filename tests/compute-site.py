@@ -1,14 +1,30 @@
 #!/usr/bin/python
 import os
 import sys
+from optparse import OptionParser
 
-FREQ_THRES = 0.2 / 100
-COVG_THRES = 5000
+OPT_DEFAULTS = {'freq_thres':0, 'covg_thres':0}
 BASES = ['A', 'C', 'G', 'T']
+USAGE = ("Usage: %prog (options) 'variant_str' ('variant_str2' (etc))\n"
+    +"       cat variants.txt > %prog (options)")
 
 def main():
 
-  if '-h' in sys.argv[1][0:3]:
+  parser = OptionParser(usage=USAGE)
+  parser.add_option('-f', '--freq-thres', dest='freq_thres', type='float',
+    default=OPT_DEFAULTS.get('freq_thres'),
+    help=('Frequency threshold for counting alleles, given in percentage: -f 1 '
+      +'= 1% frequency. Default is %default%.'))
+  parser.add_option('-c', '--covg-thres', dest='covg_thres', type='int',
+    default=OPT_DEFAULTS.get('covg_thres'),
+    help=('Coverage threshold. Each site must be supported by at least this '
+      +'many reads on each strand. Otherwise the site will not be printed in '
+      +'the output. The default is %default reads per strand.'))
+  (options, args) = parser.parse_args()
+  freq_thres = options.freq_thres
+  covg_thres = options.covg_thres
+
+  if len(sys.argv) > 1 and '-h' in sys.argv[1][0:3]:
     script_name = os.path.basename(sys.argv[0])
     print """USAGE:
   $ """+script_name+""" [sample column text]
@@ -19,10 +35,9 @@ Or invoke with no arguments to use interactively. It will read from stdin, so
 just paste one sample per line."""
     sys.exit(0)
   
-  if len(sys.argv) > 1:
+  if len(args) > 0:
     stdin = False
-    samples = list(sys.argv)
-    samples.remove(sys.argv[0])
+    samples = args
   else:
     stdin = True
     samples = sys.stdin
@@ -31,9 +46,11 @@ just paste one sample per line."""
   for sample in samples:
     print ''
     sample = sample.split(':')[-1]
+    if not sample:
+      continue
     print sample
     counts_dict = parse_counts(sample)
-    compute_stats(counts_dict)
+    compute_stats(counts_dict, freq_thres, covg_thres)
   
 
 def parse_counts(sample_str):
@@ -48,7 +65,7 @@ def parse_counts(sample_str):
   return counts_dict
 
 
-def compute_stats(counts_dict):
+def compute_stats(counts_dict, freq_thres, covg_thres):
   # totals for A, C, G, T
   counts_unstranded = {}
   for base in BASES:
@@ -71,7 +88,7 @@ def compute_stats(counts_dict):
     coverages[strand] = 0
     for count in counts_lists[strand].values():
       coverages[strand] += count
-    if coverages[strand] < COVG_THRES:
+    if coverages[strand] < covg_thres:
       failing_strands[strand] = coverages[strand]
     sys.stdout.write(strand+'coverage: '+str(coverages[strand])+"\t")
   coverages['+-'] = coverages['+'] + coverages['-']
@@ -80,7 +97,7 @@ def compute_stats(counts_dict):
   if failing_strands:
     for strand in failing_strands:
       print ('coverage on '+strand+' strand too low ('
-        +str(failing_strands[strand])+' < '+str(COVG_THRES)+")")
+        +str(failing_strands[strand])+' < '+str(covg_thres)+")")
     return
 
   # apply frequency threshold
@@ -90,7 +107,7 @@ def compute_stats(counts_dict):
       # print (variant+" freq: "+str(strand_counts[variant])+"/"
       #   +str(coverages[strand])+" = "
       #   +str(strand_counts[variant]/float(coverages[strand])))
-      if strand_counts[variant]/float(coverages[strand]) < FREQ_THRES:
+      if strand_counts[variant]/float(coverages[strand]) < freq_thres:
         strand_counts.pop(variant)
   plus_variants  = sorted(plus_counts.keys())
   minus_variants = sorted(minus_counts.keys())
@@ -131,6 +148,12 @@ def sort_variants(variant_counts):
   """Sort the list of variants based on their counts. Returns a list of just
   the variants, no counts."""
   variants = variant_counts.keys()
+  var_del = []
+  for variant in variants:
+    if variant_counts.get(variant) == 0:
+      var_del.append(variant)
+  for variant in var_del:
+    variants.remove(variant)
   variants.sort(reverse=True, key=lambda variant: variant_counts.get(variant,0))
   return variants
 
