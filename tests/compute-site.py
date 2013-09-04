@@ -2,7 +2,7 @@
 import os
 import sys
 
-FREQ_THRES = 0.2
+FREQ_THRES = 0.2 / 100
 COVG_THRES = 5000
 BASES = ['A', 'C', 'G', 'T']
 
@@ -84,8 +84,12 @@ def compute_stats(counts_dict):
     return
 
   # apply frequency threshold
-  for strand_counts in counts_lists.values():
+  for strand in counts_lists:
+    strand_counts = counts_lists[strand]
     for variant in strand_counts.keys():
+      # print (variant+" freq: "+str(strand_counts[variant])+"/"
+      #   +str(coverages[strand])+" = "
+      #   +str(strand_counts[variant]/float(coverages[strand])))
       if strand_counts[variant]/float(coverages[strand]) < FREQ_THRES:
         strand_counts.pop(variant)
   plus_variants  = sorted(plus_counts.keys())
