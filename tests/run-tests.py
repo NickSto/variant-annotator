@@ -3,7 +3,7 @@ import os
 import sys
 import subprocess
 
-DATASETS = ['artificial', 'artificial-samples', 'real']
+DATASETS = ['artificial', 'artificial-samples', 'real', 'real-mit', 'real-mit-s']
 IN_EXT  = '.vcf.in'
 OUT_EXT = '.csv.out'
 ARGS_KEY = '##comment="ARGS='
@@ -11,17 +11,18 @@ ARGS_KEY = '##comment="ARGS='
 def main():
 
   test_dir = os.path.dirname(os.path.relpath(sys.argv[0]))
-  print test_dir
+  if test_dir:
+    test_dir += os.sep
 
   for dataset in DATASETS:
-    infile  = test_dir+os.sep+dataset+IN_EXT
-    outfile = test_dir+os.sep+dataset+OUT_EXT
+    infile  = test_dir+dataset+IN_EXT
+    outfile = test_dir+dataset+OUT_EXT
 
     if not os.path.exists(infile):
-      sys.stderr.write("Error: file not found: "+infile)
+      sys.stderr.write("Error: file not found: "+infile+"\n")
       continue
     if not os.path.exists(outfile):
-      sys.stderr.write("Error: file not found: "+outfile)
+      sys.stderr.write("Error: file not found: "+outfile+"\n")
       continue
 
     options = read_options(infile)
