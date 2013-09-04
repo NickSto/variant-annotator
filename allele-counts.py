@@ -52,7 +52,8 @@ def get_options(defaults, usage, description='', epilog=''):
     help='Report variant counts by strand, in separate columns. Off by default.')
   parser.add_option('-d', '--debug', dest='debug', action='store_true', default=False,
     help=('Turn on debug mode. You must also specify a single site to process '
-      +'in a final argument using UCSC coordinate format.'))
+      +'in a final argument using UCSC coordinate format. Also, you can add a '
+      +'sample ID after another ":" to restrict it further.'))
 
   (options, args) = parser.parse_args()
 
@@ -78,13 +79,15 @@ def main():
   stranded = options.stranded
   debug = options.debug
 
+  print_sample = ''
   if debug:
     print_loc = args.get('print_loc')
     if print_loc:
-      if ':' in print_loc:
-        (print_chr, print_pos) = print_loc.split(':')
-      else:
-        print_pos = print_loc
+      coords = print_loc.split(':')
+      print_chr = coords[0]
+      print_pos = ''
+      if len(coords) > 1: print_pos = coords[1]
+      if len(coords) > 2: print_sample = coords[2].lower()
     else:
       sys.stderr.write("Warning: No site coordinate found in arguments. "
         +"Turning off debug mode.\n")
@@ -139,19 +142,21 @@ def main():
     site_data = read_site(line, sample_names, CANONICAL_VARIANTS)
 
     if debug:
-      if site_data['pos'] != print_pos:
+      if print_pos != site_data['pos']:
         continue
-      try:
-        if site_data['chr'] != print_chr:
-          continue
-      except NameError, e:
-        pass  # No chr specified. Just go ahead and print the line.
+      if print_chr != site_data['chr'] and print_chr != '':
+        continue
+      if print_sample != '':
+        for sample in site_data['samples'].keys():
+          if sample.lower() != print_sample:
+            site_data['samples'].pop(sample, None)
+
 
     site_summary = summarize_site(site_data, sample_names, CANONICAL_VARIANTS,
       freq_thres, covg_thres, stranded, debug=debug)
 
     if debug and site_summary[0]['print']:
-      print line.split('\t')[9].split(':')[-1]
+        print line.split('\t')[9].split(':')[-1]
 
     print_site(outfile_handle, site_summary, COLUMNS)
 
@@ -328,16 +333,7 @@ def summarize_site(site, sample_names, canonical, freq_thres, covg_thres,
   return site_summary
 
 
-def print_site(filehandle, site, columns):
-  """Print the output lines for one site (one per sample).
-  filehandle must be open."""
-  for sample in site:
-    if sample['print']:
-      fields = [str(sample.get(column)) for column in columns]
-      filehandle.write('\t'.join(fields)+"\n")
-
-
-def get_read_counts(stranded_counts, strands="+-"):
+def get_read_counts(stranded_counts, strands='+-'):
   """Do a simple sum of the read counts per variant, on the specified strands.
       Arguments:
   stranded_counts: Dict of the stranded variants (keys) and their read counts
@@ -425,23 +421,19 @@ def count_alleles(variant_counts, freq_thres, debug=False):
   return allele_count
 
 
+def print_site(filehandle, site, columns):
+  """Print the output lines for one site (one per sample).
+  filehandle must be open."""
+  for sample in site:
+    if sample['print']:
+      fields = [str(sample.get(column)) for column in columns]
+      filehandle.write('\t'.join(fields)+"\n")
+
+
 def fail(message):
   sys.stderr.write(message+'\n')
   sys.exit(1)
 
 
-def test():
-  inputs = [
-    {'+A':15, '+G':1,'-A':15, '-G':1},
-    {'+A':13, '+G':7,'-A':93, '-G':7},
-    {'+d1':10,'+G':2,'-d1':11,'-G':2},
-  ]
-
-  for input in inputs:
-    counts = get_read_counts(input, '+-')
-    print process_read_counts(counts, sort=True)
-    print old_read_counts(input, 0, strands='+-')
-
 if __name__ == "__main__":
   main()
-  # test()
