@@ -17,7 +17,8 @@ CANONICAL_VARIANTS = ['A', 'C', 'G', 'T']
 USAGE = """Usage: %prog [options] -i variants.vcf -o alleles.csv
        cat variants.vcf | %prog [options] > alleles.csv"""
 OPT_DEFAULTS = {'infile':'-', 'outfile':'-', 'freq_thres':1.0, 'covg_thres':100,
-  'print_header':False, 'stdin':False, 'stranded':False}
+  'print_header':False, 'stdin':False, 'stranded':False, 'no_filter':False,
+  'debug_loc':''}
 DESCRIPTION = """This will parse the VCF output of Dan's "Naive Variant Caller" (aka "BAM Coverage") Galaxy tool. For each position reported, it counts the number of reads of each base, determines the major allele, minor allele (second most frequent variant), and number of alleles above a threshold. So currently it only considers SNVs (ACGT), including in the coverage figure. By default it reads from stdin and prints to stdout."""
 EPILOG = """Requirements:
 The input VCF must report the variants for each strand.
@@ -45,6 +46,10 @@ def get_options(defaults, usage, description='', epilog=''):
     help=('Coverage threshold. Each site must be supported by at least this '
       +'many reads on each strand. Otherwise the site will not be printed in '
       +'the output. The default is %default reads per strand.'))
+  parser.add_option('-n', '--no-filter', dest='no_filter', action='store_const',
+    const=not(defaults.get('no_filter')), default=defaults.get('no_filter'),
+    help=('Operate without a frequency threshold or coverage threshold. '
+      +'Equivalent to "-c 0 -f 0".'))
   parser.add_option('-H', '--header', dest='print_header', action='store_const',
     const=not(defaults.get('print_header')), default=defaults.get('print_header'),
     help=('Print header line. This is a #-commented line with the column '
@@ -52,21 +57,15 @@ def get_options(defaults, usage, description='', epilog=''):
   parser.add_option('-s', '--stranded', dest='stranded', action='store_const',
     const=not(defaults.get('stranded')), default=defaults.get('stranded'),
     help='Report variant counts by strand, in separate columns. Off by default.')
-  parser.add_option('-d', '--debug', dest='debug', action='store_true', default=False,
-    help=('Turn on debug mode. You must also specify a single site to process '
-      +'in a final argument using UCSC coordinate format. Also, you can add a '
-      +'sample ID after another ":" to restrict it further.'))
+  parser.add_option('-d', '--debug', dest='debug_loc',
+    default=defaults.get('debug_loc'),
+    help=('Turn on debug mode and specify a single site to process using UCSC '
+      +'coordinate format. You can also append a sample ID after another ":" '
+      +'to restrict it further.'))
 
   (options, args) = parser.parse_args()
 
-  # read in positional arguments
-  arguments = {}
-  if options.debug:
-    if len(args) >= 1:
-      arguments['print_loc'] = args[0]
-      args.remove(args[0])
-
-  return (options, arguments)
+  return (options, args)
 
 
 def main():
@@ -79,21 +78,20 @@ def main():
   freq_thres = options.freq_thres / 100.0
   covg_thres = options.covg_thres
   stranded = options.stranded
-  debug = options.debug
+  debug_loc = options.debug_loc
+  if options.no_filter:
+    freq_thres = 0
+    covg_thres = 0
 
+  debug = False
   print_sample = ''
-  if debug:
-    print_loc = args.get('print_loc')
-    if print_loc:
-      coords = print_loc.split(':')
-      print_chr = coords[0]
-      print_pos = ''
-      if len(coords) > 1: print_pos = coords[1]
-      if len(coords) > 2: print_sample = coords[2].lower()
-    else:
-      sys.stderr.write("Warning: No site coordinate found in arguments. "
-        +"Turning off debug mode.\n")
-      debug = False
+  if debug_loc:
+    debug = True
+    coords = debug_loc.split(':')
+    print_chr = coords[0]
+    print_pos = ''
+    if len(coords) > 1: print_pos = coords[1]
+    if len(coords) > 2: print_sample = coords[2]
 
   # set infile_handle to either stdin or the input file
   if infile == OPT_DEFAULTS.get('infile'):
@@ -150,8 +148,11 @@ def main():
         continue
       if print_sample != '':
         for sample in site_data['samples'].keys():
-          if sample.lower() != print_sample:
+          if sample.lower() != print_sample.lower():
             site_data['samples'].pop(sample, None)
+        if len(site_data['samples']) == 0:
+          sys.stderr.write("Error: Sample '"+print_sample+"' not found.\n")
+          sys.exit(1)
 
 
     site_summary = summarize_site(site_data, sample_names, CANONICAL_VARIANTS,
@@ -252,6 +253,8 @@ def summarize_site(site, sample_names, canonical, freq_thres, covg_thres,
   stranded=False, debug=False):
   """Take the raw data from the VCF line and transform it into the summary data
   to be printed in the output format."""
+
+  print site
 
   site_summary = []
   for sample_name in sample_names:
