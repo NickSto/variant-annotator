@@ -1,0 +1,27 @@
+##fileformat=VCFv4.1
+##comment="ARGS=-H -f 0 -c 0"
+##comment="This is a test set of sites copied from real data."
+##fileDate=19700101
+##source=Dan
+##reference=file:///scratch/dan/galaxy/galaxy-central/database/files/002/dataset_0000.dat
+##INFO=<ID=AC,Number=A,Type=Integer,Description="Allele count in genotypes, for each ALT allele, in the same order as listed">
+##INFO=<ID=AF,Number=A,Type=Float,Description="Allele Frequency, for each ALT allele, in the same order as listed">
+##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">
+##FORMAT=<ID=AC,Number=.,Type=Integer,Description="Allele count in genotypes, for each ALT allele, in the same order as listed">
+##FORMAT=<ID=AF,Number=.,Type=Float,Description="Allele Frequency, for each ALT allele, in the same order as listed">
+##FORMAT=<ID=NC,Number=.,Type=String,Description="Nucleotide and indel counts">
+#CHROM	POS	ID	REF	ALT	QUAL	FILTER	INFO	FORMAT	THYROID
+chr1	246704250	.	A	N	.	.	AC=1;AF=0.0333333333333	GT:AC:AF:NC	0/0:1:0.0333333333333:+A=15,+N=1,-A=14,
+chr1	246704257	.	T	N	.	.	AC=2;AF=0.027397260274	GT:AC:AF:NC	0/0:2:0.027397260274:+T=52,+N=2,-T=19,
+chr1	246704268	.	A	.	.	.	AC=;AF=	GT:AC:AF:NC	0/0:::+A=82,-A=22,
+chr1	246704269	.	T	.	.	.	AC=;AF=	GT:AC:AF:NC	0/0:::+T=83,-T=22,
+chr1	246704363	.	C	G,N	.	.	AC=3,1;AF=0.0394736842105,0.0131578947368	GT:AC:AF:NC	0/0:3,1:0.0394736842105,0.0131578947368:+C=52,+G=3,+N=1,-C=20,
+chr1	246704437	.	C	A,N	.	.	AC=5,1;AF=0.0367647058824,0.00735294117647	GT:AC:AF:NC	0/0:5,1:0.0367647058824,0.00735294117647:+C=72,-A=5,-C=58,-N=1,
+chr1	246707878	.	G	GA	.	.	AC=6;AF=0.043795620438	GT:AC:AF:NC	0/0:6:0.043795620438:+G=90,-G=41,-GA=6,
+chr1	246714587	.	G	A	.	.	AC=30;AF=0.41095890411	GT:AC:AF:NC	0/1:30:0.41095890411:+A=10,+G=2,-A=20,-G=41,
+chr1	246729215	.	T	G,A	.	.	AC=1,1;AF=0.0111111111111,0.0111111111111	GT:AC:AF:NC	0/0:1,1:0.0111111111111,0.0111111111111:+A=1,+T=81,-T=7,-G=1,
+chr1	246729216	.	T	G,A	.	.	AC=1,1;AF=0.0111111111111,0.0111111111111	GT:AC:AF:NC	0/0:1,1:0.0111111111111,0.0111111111111:+A=1,+T=81,-T=9,-G=1,
+chr1	246729378	.	A	C	.	.	AC=7;AF=0.304347826087	GT:AC:AF:NC	0/1:7:0.304347826087:-A=16,-C=7,
+chr1	246729392	.	A	G,AG	.	.	AC=10,1;AF=0.25,0.025	GT:AC:AF:NC	0/1:10,1:0.25,0.025:-A=29,-AG=1,-G=10,
+chr7	91502881	.	TC	T	.	.	AC=3;AF=0.103448275862	GT:AC:AF:NC	0/0:3:0.103448275862:+T=14,-d1=3,-T=12,
+chr7	91502897	.	C	A	.	.	AC=7;AF=0.162790697674	GT:AC:AF:NC	0/0:7:0.162790697674:+A=7,+C=17,-C=19,

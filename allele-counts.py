@@ -1,6 +1,8 @@
 #!/usr/bin/python
 # This parses the output of Dan's "Naive Variant Detector" (previously,
 # "BAM Coverage"). It was forked from the code of "bam-coverage.py".
+# Or, to put it briefly,
+# cat variants.vcf | grep -v '^#' | cut -f 10 | cut -d ':' -f 4 | tr ',=' '\t:'
 #
 # New in this version:
 #   Made header line customizable
@@ -256,9 +258,6 @@ def summarize_site(site, sample_names, canonical, freq_thres, covg_thres,
 
     sample = {'print':False}
     variants = site['samples'].get(sample_name)
-    if not variants:
-      site_summary.append(sample)
-      continue
 
     sample['sample'] = sample_name
     sample['chr']    = site['chr']
@@ -275,7 +274,7 @@ def summarize_site(site, sample_names, canonical, freq_thres, covg_thres,
       elif variant[0] == '-':
         covg_minus += variants[variant]
     # stranded coverage threshold
-    if coverage <= 0 or covg_plus < covg_thres or covg_minus < covg_thres:
+    if covg_plus < covg_thres or covg_minus < covg_thres:
       site_summary.append(sample)
       continue
     else:
@@ -309,12 +308,7 @@ def summarize_site(site, sample_names, canonical, freq_thres, covg_thres,
 
     sample['alleles'] = count_alleles(variants, freq_thres, debug=debug)
 
-    # set minor allele to N if there's a tie for 2nd
-    if len(ranked_bases) >= 3 and ranked_bases[1][1] == ranked_bases[2][1]:
-      ranked_bases[1] = ('N', 0)
-      sample['alleles'] = 1 if sample['alleles'] else 0
-
-    if debug: print ranked_bases
+    if debug: print "ranked +-: "+str(ranked_bases)
 
     sample['coverage'] = coverage
     try:
@@ -327,6 +321,11 @@ def summarize_site(site, sample_names, canonical, freq_thres, covg_thres,
     except IndexError, e:
       sample['minor']  = '.'
       sample['freq']   = 0.0
+
+    # set minor allele to N if there's a tie for 2nd
+    if len(ranked_bases) >= 3 and ranked_bases[1][1] == ranked_bases[2][1]:
+      sample['minor'] = 'N'
+      sample['freq'] = 0.0
 
     site_summary.append(sample)
 

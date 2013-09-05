@@ -3,7 +3,15 @@ import os
 import sys
 import subprocess
 
-DATASETS = ['artificial', 'artificial-samples', 'real', 'real-mit', 'real-mit-s']
+DATASETS = [
+  'artificial',
+  'artificial-samples',
+  'artificial-nofilt',
+  'real',
+  'real-mit',
+  'real-mit-s',
+  'real-nofilt',
+]
 IN_EXT  = '.vcf.in'
 OUT_EXT = '.csv.out'
 ARGS_KEY = '##comment="ARGS='
