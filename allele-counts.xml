@@ -1,13 +1,13 @@
 <tool id="allele_counts_1" version="1.1" name="Variant Annotator">
-  <description></description>
+  <description> process variant counts</description>
   <command interpreter="python">allele-counts.py -i $input -o $output -f $freq -c $covg $header $stranded</command>
   <inputs>
     <param name="input" type="data" format="vcf" label="Input variants from Naive Variants Detector"/>
     <param name="freq" type="float" value="1.0" min="0" max="100" label="Minor allele frequency threshold (in percent)"/>
-    <param name="covg" type="integer" value="10" min="0" label="Coverage threshold (per strand)"/>
+    <param name="covg" type="integer" value="10" min="0" label="Coverage threshold (in reads per strand)"/>
     <param name="nofilt" type="boolean" truevalue="-n" falsevalue="" checked="False" label="Do not filter sites or alleles" />
-    <param name="header" type="boolean" truevalue="-H" falsevalue="" checked="True" label="Write header line" />
     <param name="stranded" type="boolean" truevalue="-s" falsevalue="" checked="False" label="Output stranded base counts" />
+    <param name="header" type="boolean" truevalue="-H" falsevalue="" checked="True" label="Write header line" />
   </inputs>
   <outputs>
     <data name="output" format="tabular"/>
@@ -23,40 +23,50 @@
 
 **What it does**
 
-This tool parses variant counts from a special VCF file (normally the output of the **Naive Variant Detector** tool). It counts simple (ACGT) variants, calculates numbers of alleles, and calculates minor allele frequency. It applies filters based on coverage, strand bias, and minor allele frequency cutoffs.
-
------
-
-.. class:: warningmark
-
-**Note**
-
-The VCF must have a certain genotype field in the sample columns, giving the read count of each type of variant. Also, the variant data **must be stranded**. The **Naive Variant Detector** tool produces this type of VCF.
+This tool parses variant counts from a special VCF file. It counts simple variants, calculates numbers of alleles, and calculates minor allele frequency. It can apply filters based on coverage, strand bias, and minor allele frequency cutoffs.
 
 -----
 
 .. class:: infomark
 
-**Output columns**
+**Input Format**
 
-Each row represents one site in one sample. 12 fields give information about that site::
+The input VCF should be like the output of the **Naive Variant Detector** tool (using the stranded option). The sample column(s) must give the read count for each variant **on each strand**. Below is an example of a valid sample column entry (the important part is after the last colon)::
+
+    0/0:1:0.02:+T=27,+G=1,-T=22,
+
+.. class:: warningmark
+
+**Note:** variants that are not A/C/G/T SNVs will be ignored!
+
+-----
+
+.. class:: infomark
+
+**Output**
+
+Each row represents one site in one sample. For unstranded output, 12 fields give information about that site::
 
     1.  SAMPLE  - Sample names (from VCF sample column labels)
     2.  CHR     - Chromosome of the site
     3.  POS     - Chromosomal coordinate of the site
     4.  A       - Number of reads supporting an 'A'
-    5.  C       - ditto, for 'C'
-    6.  G       - ditto, for 'G'
-    7.  T       - ditto, for 'T'
+    5.  C       - 'C' reads
+    6.  G       - 'G' reads
+    7.  T       - 'T' reads
     8.  CVRG    - Total (number of reads supporting one of the four bases above)
     9.  ALLELES - Number of qualifying alleles
     10. MAJOR   - Major allele base
     11. MINOR   - Minor allele base (2nd most prevalent variant)
     12. MINOR.FREQ.PERC. - Frequency of minor allele
 
+For stranded output, instead of using 4 columns to report read counts per base, 8 are used to report the counts per strand::
+
+    #SAMPLE CHR POS +A  +C  +G  +T  -A  -C  -G  -T  CVRG  ALLELES MAJOR MINOR MINOR.FREQ.PERC.
+
 **Example**
 
-This is the header line, followed by some example data lines. Note that some samples and/or sites will not be included in the output, if they fall below the coverage threshold::
+Below is the header line, followed by some example data lines. Since the input contained three samples, the data for each site is reported on three consecutive lines. However, if a sample fell below the coverage threshold at that site, the line will be omitted::
 
     #SAMPLE  CHR    POS  A   C    G    T  CVRG  ALLELES  MAJOR  MINOR  MINOR.FREQ.PERC.
     BLOOD_1  chr20  99   0   101  1    2  104   1        C      T      0.01923
@@ -71,19 +81,14 @@ This is the header line, followed by some example data lines. Note that some sam
 
 **Site printing and allele tallying requirements**
 
-Each line is printed only when the site is covered by the threshold number of reads **on each strand**. If coverage of either strand is below the threshold, the line (sample + site combination) is omitted.
+Coverage threshold:
+If a coverage threshold is used, the number of reads **on each strand** must be at or above the threshold. If either strand is below the threshold, the line will be omitted. **N.B.** this means the total coverage for each printed site will be at least twice the number you give in the "coverage threshold" option. Also, only simple variants are counted, meaning a site with 100 reads supporting a deletion variant would not be printed.
 
-**N.B.**: This means the total coverage for each printed site will be at least twice the number you give in the "coverage threshold" option.
+Frequency threshold:
+If a frequency threshold is used, alleles are only counted (in the ALLELES column) if they meet or exceed this minor allele frequency threshold.
 
-Also, reads supporting a variant outside the canonical 4 nucleotides will not count towards the coverage requirement. For instance, a site/sample line with 100x coverage, all of which support a deletion variant, will not be printed.
-
-Alleles are only counted (in column 9) if they meet or exceed the minor allele frequency threshold. So a site/sample line with types of variants, 96% A, 3.3% C, and 0.7% G, will count as 2 alleles (at 1% threshold).
-
-Strand bias: the alleles passing the threshold on each strand have to match (though not in order). Otherwise, the allele count will be 0. So a site/sample line whose + strand shows 70% A, 27% C, and 3% G, and - strand shows 70% A and 30% C will have an allele count of 0. The minor allele and minor allele frequency, though, will always be reported\*.
-
-But in this version, there is no requirement that the strands show similar allele frequencies, as long as they both pass the threshold.
-
-\*One specific case will actually affect the reported minor allele identity and frequency. If there is a tie for the minor allele (between the 2nd and 3rd most common alleles), the minor allele will be reporated as 'N', and the frequency as 0.0.
+Strand bias:
+The alleles passing the threshold on each strand must match (though not in order), or the allele count will be 0. So a site with A, C, G on the plus strand and A, G on the minus strand will get an allele count of zero, though the (strand-independent) minor allele and minor allele frequency will still be reported. If there is a tie for the minor allele, one will be randomly chosen.
 
   </help>
 
