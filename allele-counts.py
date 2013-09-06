@@ -254,8 +254,6 @@ def summarize_site(site, sample_names, canonical, freq_thres, covg_thres,
   """Take the raw data from the VCF line and transform it into the summary data
   to be printed in the output format."""
 
-  print site
-
   site_summary = []
   for sample_name in sample_names:
 
