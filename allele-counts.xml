@@ -31,13 +31,13 @@ This tool parses variant counts from a special VCF file. It counts simple varian
 
 **Input Format**
 
-The input VCF should be like the output of the **Naive Variant Detector** tool (using the stranded option). The sample column(s) must give the read count for each variant **on each strand**. Below is an example of a valid sample column entry (the important part is after the last colon)::
-
-    0/0:1:0.02:+T=27,+G=1,-T=22,
-
 .. class:: warningmark
 
 **Note:** variants that are not A/C/G/T SNVs will be ignored!
+
+The input VCF should be like the output of the **Naive Variant Detector** tool (using the stranded option). The sample column(s) must give the read count for each variant **on each strand**. Below is an example of a valid sample column entry (the important part is after the last colon)::
+
+    0/0:1:0.02:+T=27,+G=1,-T=22,
 
 -----
 
@@ -47,7 +47,7 @@ The input VCF should be like the output of the **Naive Variant Detector** tool (
 
 Each row represents one site in one sample. For unstranded output, 12 fields give information about that site::
 
-    1.  SAMPLE  - Sample names (from VCF sample column labels)
+    1.  SAMPLE  - Sample name (from VCF sample column labels)
     2.  CHR     - Chromosome of the site
     3.  POS     - Chromosomal coordinate of the site
     4.  A       - Number of reads supporting an 'A'
@@ -56,17 +56,18 @@ Each row represents one site in one sample. For unstranded output, 12 fields giv
     7.  T       - 'T' reads
     8.  CVRG    - Total (number of reads supporting one of the four bases above)
     9.  ALLELES - Number of qualifying alleles
-    10. MAJOR   - Major allele base
-    11. MINOR   - Minor allele base (2nd most prevalent variant)
+    10. MAJOR   - Major allele
+    11. MINOR   - Minor allele (2nd most prevalent variant)
     12. MINOR.FREQ.PERC. - Frequency of minor allele
 
-For stranded output, instead of using 4 columns to report read counts per base, 8 are used to report the counts per strand::
+For stranded output, instead of using 4 columns to report read counts per base, 8 are used to report the stranded counts per base::
 
-    #SAMPLE CHR POS +A  +C  +G  +T  -A  -C  -G  -T  CVRG  ALLELES MAJOR MINOR MINOR.FREQ.PERC.
+    1       2   3   4  5  6  7  8  9 10 11  12    13     14    15         16
+    SAMPLE CHR POS +A +C +G +T -A -C -G -T CVRG ALLELES MAJOR MINOR MINOR.FREQ.PERC.
 
 **Example**
 
-Below is the header line, followed by some example data lines. Since the input contained three samples, the data for each site is reported on three consecutive lines. However, if a sample fell below the coverage threshold at that site, the line will be omitted::
+Below is a header line, followed by some example data lines. Since the input contained three samples, the data for each site is reported on three consecutive lines. However, if a sample fell below the coverage threshold at that site, the line will be omitted::
 
     #SAMPLE  CHR    POS  A   C    G    T  CVRG  ALLELES  MAJOR  MINOR  MINOR.FREQ.PERC.
     BLOOD_1  chr20  99   0   101  1    2  104   1        C      T      0.01923
@@ -82,13 +83,16 @@ Below is the header line, followed by some example data lines. Since the input c
 **Site printing and allele tallying requirements**
 
 Coverage threshold:
-If a coverage threshold is used, the number of reads **on each strand** must be at or above the threshold. If either strand is below the threshold, the line will be omitted. **N.B.** this means the total coverage for each printed site will be at least twice the number you give in the "coverage threshold" option. Also, only simple variants are counted, meaning a site with 100 reads supporting a deletion variant would not be printed.
+
+If a coverage threshold is used, the number of reads **on each strand** must be at or above the threshold. If either strand is below the threshold, the line will be omitted. **N.B.** this means the total coverage for each printed site will be at least twice the number you give in the "coverage threshold" option. Also, since only simple variants are counted, a site with 100 reads, all supporting a deletion variant, would not be printed.
 
 Frequency threshold:
+
 If a frequency threshold is used, alleles are only counted (in the ALLELES column) if they meet or exceed this minor allele frequency threshold.
 
 Strand bias:
-The alleles passing the threshold on each strand must match (though not in order), or the allele count will be 0. So a site with A, C, G on the plus strand and A, G on the minus strand will get an allele count of zero, though the (strand-independent) minor allele and minor allele frequency will still be reported. If there is a tie for the minor allele, one will be randomly chosen.
+
+The alleles passing the threshold on each strand must match (though not in order), or the allele count will be 0. So a site with A, C, G on the plus strand and A, G on the minus strand will get an allele count of zero, though the (strand-independent) major allele, minor allele, and minor allele frequency will still be reported. If there is a tie for the minor allele, one will be randomly chosen.
 
   </help>
 
