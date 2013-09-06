@@ -9,6 +9,7 @@
 #     - separate from internal column labels, which are used as dict keys
 import os
 import sys
+import random
 from optparse import OptionParser
 
 COLUMNS = ['sample', 'chr', 'pos', 'A', 'C', 'G', 'T', 'coverage', 'alleles', 'major', 'minor', 'freq'] #, 'bias']
@@ -18,7 +19,7 @@ USAGE = """Usage: %prog [options] -i variants.vcf -o alleles.csv
        cat variants.vcf | %prog [options] > alleles.csv"""
 OPT_DEFAULTS = {'infile':'-', 'outfile':'-', 'freq_thres':1.0, 'covg_thres':100,
   'print_header':False, 'stdin':False, 'stranded':False, 'no_filter':False,
-  'debug_loc':''}
+  'debug_loc':'', 'seed':''}
 DESCRIPTION = """This will parse the VCF output of Dan's "Naive Variant Caller" (aka "BAM Coverage") Galaxy tool. For each position reported, it counts the number of reads of each base, determines the major allele, minor allele (second most frequent variant), and number of alleles above a threshold. So currently it only considers SNVs (ACGT), including in the coverage figure. By default it reads from stdin and prints to stdout."""
 EPILOG = """Requirements:
 The input VCF must report the variants for each strand.
@@ -57,6 +58,8 @@ def get_options(defaults, usage, description='', epilog=''):
   parser.add_option('-s', '--stranded', dest='stranded', action='store_const',
     const=not(defaults.get('stranded')), default=defaults.get('stranded'),
     help='Report variant counts by strand, in separate columns. Off by default.')
+  parser.add_option('-r', '--rand-seed', dest='seed',
+    default=defaults.get('seed'), help=('Seed for random number generator.'))
   parser.add_option('-d', '--debug', dest='debug_loc',
     default=defaults.get('debug_loc'),
     help=('Turn on debug mode and specify a single site to process using UCSC '
@@ -79,9 +82,14 @@ def main():
   covg_thres = options.covg_thres
   stranded = options.stranded
   debug_loc = options.debug_loc
+  seed = options.seed
+  
   if options.no_filter:
     freq_thres = 0
     covg_thres = 0
+
+  if seed:
+    random.seed(seed)
 
   debug = False
   print_sample = ''
@@ -309,6 +317,14 @@ def summarize_site(site, sample_names, canonical, freq_thres, covg_thres,
 
     sample['alleles'] = count_alleles(variants, freq_thres, debug=debug)
 
+    # If there's a tie for 2nd, randomly choose one to be 2nd
+    if len(ranked_bases) >= 3 and ranked_bases[1][1] == ranked_bases[2][1]:
+      swap = random.choice([True,False])
+      if swap:
+        tmp_base = ranked_bases[1]
+        ranked_bases[1] = ranked_bases[2]
+        ranked_bases[2] = tmp_base
+
     if debug: print "ranked +-: "+str(ranked_bases)
 
     sample['coverage'] = coverage
@@ -322,11 +338,6 @@ def summarize_site(site, sample_names, canonical, freq_thres, covg_thres,
     except IndexError, e:
       sample['minor']  = '.'
       sample['freq']   = 0.0
-
-    # set minor allele to N if there's a tie for 2nd
-    if len(ranked_bases) >= 3 and ranked_bases[1][1] == ranked_bases[2][1]:
-      sample['minor'] = 'N'
-      sample['freq'] = 0.0
 
     site_summary.append(sample)
 

@@ -1,5 +1,5 @@
 ##fileformat=VCFv4.1
-##comment="ARGS=-H -f 0 -c 0"
+##comment="ARGS=-H -r 1 -f 0 -c 0"
 ##comment="This is a test set of sites copied from real data."
 ##fileDate=19700101
 ##source=Dan

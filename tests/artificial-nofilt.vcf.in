@@ -1,5 +1,5 @@
 ##fileformat=VCFv4.1
-##comment="ARGS=-H -f 0 -c 0"
+##comment="ARGS=-H -r 1 -f 0 -c 0"
 ##comment="This is a test set of made-up sites, each created in order to test certain functionality. It's meant to be run with -f 10 -c 10"
 ##fileDate=19700101
 ##source=Dan
