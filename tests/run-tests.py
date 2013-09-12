@@ -16,11 +16,48 @@ IN_EXT  = '.vcf.in'
 OUT_EXT = '.csv.out'
 ARGS_KEY = '##comment="ARGS='
 
+XML = {
+  'tests_start':'  <tests>',
+  'test_start': '    <test>',
+  'input':      '      <param name="input" value="tests/%s" />',
+  'param':      '      <param name="%s" value="%s" />',
+  'output':     '      <output name="output" file="tests/%s" />',
+  'test_end':   '    </test>',
+  'tests_end':  '  </tests>',
+}
+PARAMS = {
+  '-f':'freq',
+  '-c':'covg',
+  '-H':'header',
+  '-s':'stranded',
+  '-n':'nofilt',
+  '-r':'seed',
+}
+PARAM_ARG = {
+  '-f':True,
+  '-c':True,
+  '-H':False,
+  '-s':False,
+  '-n':False,
+  '-r':True,
+}
+
 def main():
+
+  do_print_xml = False
+  if len(sys.argv) > 1:
+    if sys.argv[1] == '-x':
+      do_print_xml = True
+    else:
+      sys.stderr.write("Error: unrecognized option '"+sys.argv[1]+"'\n")
+      sys.exit(1)
 
   test_dir = os.path.dirname(os.path.relpath(sys.argv[0]))
   if test_dir:
     test_dir += os.sep
+
+  if do_print_xml:
+    print XML.get('tests_start')
 
   for dataset in DATASETS:
     infile  = test_dir+dataset+IN_EXT
@@ -34,11 +71,48 @@ def main():
       continue
 
     options = read_options(infile)
-    script_cmd = 'allele-counts.py '+options+' -i '+infile
-    bash_cmd = 'diff '+outfile+' <('+script_cmd+')'
-    # print infile+":"
-    print script_cmd
-    subprocess.call(['bash', '-c', bash_cmd])
+    if do_print_xml:
+      print_xml(infile, outfile, options, XML, PARAMS, PARAM_ARG)
+    else:
+      run_tests(infile, outfile, options)
+
+  if do_print_xml:
+    print XML.get('tests_end')
+
+
+def run_tests(infile, outfile, options):
+  script_cmd = 'allele-counts.py '+options+' -i '+infile
+  bash_cmd = 'diff '+outfile+' <('+script_cmd+')'
+  print script_cmd
+  subprocess.call(['bash', '-c', bash_cmd])
+
+
+def print_xml(infile, outfile, options_str, xml, params, param_arg):
+  infile = os.path.basename(infile)
+  outfile = os.path.basename(outfile)
+
+  options = options_str.split()  # on whitespace
+
+  print xml.get('test_start')
+  print xml.get('input') % infile
+
+  i = 0
+  while i < len(options):
+    opt = options[i]
+    if not params.has_key(opt) or not param_arg.has_key(opt):
+      sys.stderr.write("Error: unknown option '"+opt+"' in ARGS list in file "
+        +infile+"\n")
+      sys.exit(1)
+    if param_arg[opt]:
+      i+=1
+      arg = options[i]
+      print xml.get('param') % (params[opt], arg)
+    else:
+      print xml.get('param') % (params[opt], opt)
+    i+=1
+
+  print xml.get('output') % outfile
+  print xml.get('test_end')
 
 
 def read_options(infile):
