@@ -3,6 +3,7 @@ import os
 import sys
 import subprocess
 
+SCRIPT_NAME = 'allele-counts.py'
 DATASETS = [
   'artificial',
   'artificial-samples',
@@ -53,6 +54,7 @@ def main():
       sys.exit(1)
 
   test_dir = os.path.dirname(os.path.relpath(sys.argv[0]))
+  script_dir = os.path.dirname(test_dir)
   if test_dir:
     test_dir += os.sep
 
@@ -74,14 +76,14 @@ def main():
     if do_print_xml:
       print_xml(infile, outfile, options, XML, PARAMS, PARAM_ARG)
     else:
-      run_tests(infile, outfile, options)
+      run_tests(infile, outfile, options, script_dir)
 
   if do_print_xml:
     print XML.get('tests_end')
 
 
-def run_tests(infile, outfile, options):
-  script_cmd = 'allele-counts.py '+options+' -i '+infile
+def run_tests(infile, outfile, options, script_dir):
+  script_cmd = script_dir+os.sep+SCRIPT_NAME+' '+options+' -i '+infile
   bash_cmd = 'diff '+outfile+' <('+script_cmd+')'
   print script_cmd
   subprocess.call(['bash', '-c', bash_cmd])
@@ -96,6 +98,7 @@ def print_xml(infile, outfile, options_str, xml, params, param_arg):
   print xml.get('test_start')
   print xml.get('input') % infile
 
+  # read in options one at a time, print <param> line
   i = 0
   while i < len(options):
     opt = options[i]
@@ -103,12 +106,14 @@ def print_xml(infile, outfile, options_str, xml, params, param_arg):
       sys.stderr.write("Error: unknown option '"+opt+"' in ARGS list in file "
         +infile+"\n")
       sys.exit(1)
+    # takes argument
     if param_arg[opt]:
       i+=1
       arg = options[i]
       print xml.get('param') % (params[opt], arg)
+    # no argument (boolean)
     else:
-      print xml.get('param') % (params[opt], opt)
+      print xml.get('param') % (params[opt], 'true')
     i+=1
 
   print xml.get('output') % outfile
