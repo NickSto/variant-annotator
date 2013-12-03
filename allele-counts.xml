@@ -1,4 +1,4 @@
-<tool id="allele_counts_1" version="1.1" name="Variant Annotator">
+<tool id="allele_counts_1" version="1.2" name="Variant Annotator">
   <description> process variant counts</description>
   <command interpreter="python">allele-counts.py -i $input -o $output -f $freq -c $covg $header $stranded $nofilt -r $seed</command>
   <inputs>
