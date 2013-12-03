@@ -14,13 +14,14 @@ $ cat variants.vcf | grep -v '^#' | cut -f 10 | cut -d ':' -f 4 | tr ',=' '\t:'
 from __future__ import division
 import os
 import sys
+import errno
 import random
 from optparse import OptionParser
 
 COLUMNS = ['sample', 'chr', 'pos', 'A', 'C', 'G', 'T', 'coverage', 'alleles',
   'major', 'minor', 'freq', 'bias']
 COLUMN_LABELS = ['SAMPLE', 'CHR',  'POS', 'A', 'C', 'G', 'T', 'CVRG', 'ALLELES',
-  'MAJOR', 'MINOR', 'MAF', 'STRAND.BIAS']
+  'MAJOR', 'MINOR', 'MAF', 'BIAS']
 CANONICAL_VARIANTS = ['A', 'C', 'G', 'T']
 USAGE = """Usage: %prog [options] -i variants.vcf -o alleles.csv
        cat variants.vcf | %prog [options] > alleles.csv"""
@@ -39,7 +40,6 @@ The variants should be case-sensitive (e.g. all capital base letters).
 Strand bias: Both strands must show the same bases passing the frequency
 threshold (but not necessarily in the same order). If the site fails this test,
 the number of alleles is reported as 0."""
-
 
 def get_options(defaults, usage, description='', epilog=''):
   """Get options, print usage text."""
@@ -116,6 +116,7 @@ def main():
     if len(coords) > 2: print_sample = coords[2]
 
   # set infile_handle to either stdin or the input file
+  global infile_handle
   if infile == OPT_DEFAULTS.get('infile'):
     infile_handle = sys.stdin
     sys.stderr.write("Reading from standard input..\n")
@@ -126,6 +127,7 @@ def main():
       fail('Error: Input VCF file '+infile+' not found.')
 
   # set outfile_handle to either stdout or the output file
+  global outfile_handle
   if outfile == OPT_DEFAULTS.get('outfile'):
     outfile_handle = sys.stdout
   else:
@@ -183,13 +185,15 @@ def main():
     if debug and site_summary[0]['print']:
         print line.split('\t')[9].split(':')[-1]
 
-    print_site(outfile_handle, site_summary, COLUMNS)
+    try:
+      print_site(outfile_handle, site_summary, COLUMNS)
+    except IOError as ioe:
+      if ioe.errno == errno.EPIPE:
+        cleanup()
+        sys.exit(0)
 
   # close any open filehandles
-  if infile_handle is not sys.stdin:
-    infile_handle.close()
-  if outfile_handle is not sys.stdout:
-    outfile_handle.close()
+  cleanup()
 
   # keeps Galaxy from giving an error if there were messages on stderr
   sys.exit(0)
@@ -354,7 +358,11 @@ def summarize_site(site, sample_names, canonical, freq_thres, covg_thres,
       sample['freq']   = 0.0
 
     # Now that we've decided major and minor, we can calculate strand bias
-    sample['bias'] = round(get_strand_bias(sample, variants), 5)
+    bias = get_strand_bias(sample, variants)
+    if bias is None:
+      sample['bias'] = '.'
+    else:
+      sample['bias'] = round(bias, 5)
 
     site_summary.append(sample)
 
@@ -451,18 +459,19 @@ def count_alleles(variant_counts, freq_thres, debug=False):
 
 def get_strand_bias(sample, variants):
   """Based on method 1 (SB) of Guo et al., 2012
-  If any denominator would be zero, it returns 100000 as the score. This is
-  when there are no reads on one of the strands, or when there are no minor
-  allele reads."""
+  If there a denominator would be 0, there is no valid result and this will
+  return None. This occurs when there are no reads on one of the strands, or
+  when there are no minor allele reads."""
   # using same variable names as in paper
   a = variants.get('+'+sample['major'], 0) # forward major allele
   b = variants.get('+'+sample['minor'], 0) # forward minor allele
   c = variants.get('-'+sample['major'], 0) # reverse major allele
   d = variants.get('-'+sample['minor'], 0) # reverse minor allele
-  if a+b <= 0 or c+d <= 0 or b+d <= 0:
-    return 100000
-  else:
+  # no minor allele reads
+  try:
     return abs(b/(a+b) - d/(c+d)) / ((b+d) / (a+b+c+d))
+  except ZeroDivisionError:
+    return None
 
 
 def print_site(filehandle, site, columns):
@@ -475,8 +484,16 @@ def print_site(filehandle, site, columns):
 
 
 def fail(message):
+  cleanup()
   sys.stderr.write(message+'\n')
   sys.exit(1)
+
+
+def cleanup():
+  if isinstance(infile_handle, file):
+    infile_handle.close()
+  if isinstance(outfile_handle, file):
+    outfile_handle.close()
 
 
 if __name__ == "__main__":
