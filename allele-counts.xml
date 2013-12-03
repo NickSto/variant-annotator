@@ -56,7 +56,7 @@ The input VCF should be like the output of the **Naive Variant Detector** tool (
 
 **Output**
 
-Each row represents one site in one sample. For unstranded output, 12 fields give information about that site::
+Each row represents one site in one sample. For **unstranded** output, 13 fields give information about that site::
 
     1.  SAMPLE  - Sample name (from VCF sample column labels)
     2.  CHR     - Chromosome of the site
@@ -69,23 +69,24 @@ Each row represents one site in one sample. For unstranded output, 12 fields giv
     9.  ALLELES - Number of qualifying alleles
     10. MAJOR   - Major allele
     11. MINOR   - Minor allele (2nd most prevalent variant)
-    12. MINOR.FREQ.PERC. - Frequency of minor allele
+    12. MAF     - Frequency of minor allele
+    13. BIAS    - Strand bias measure
 
 For stranded output, instead of using 4 columns to report read counts per base, 8 are used to report the stranded counts per base::
 
-    1       2   3   4  5  6  7  8  9 10 11  12    13     14    15         16
-    SAMPLE CHR POS +A +C +G +T -A -C -G -T CVRG ALLELES MAJOR MINOR MINOR.FREQ.PERC.
+    1       2   3   4  5  6  7  8  9 10 11  12    13     14    15   16   17
+    SAMPLE CHR POS +A +C +G +T -A -C -G -T CVRG ALLELES MAJOR MINOR MAF BIAS
 
 **Example**
 
 Below is a header line, followed by some example data lines. Since the input contained three samples, the data for each site is reported on three consecutive lines. However, if a sample fell below the coverage threshold at that site, the line will be omitted::
 
-    #SAMPLE  CHR    POS  A   C    G    T  CVRG  ALLELES  MAJOR  MINOR  MINOR.FREQ.PERC.
-    BLOOD_1  chr20  99   0   101  1    2  104   1        C      T      0.01923
-    BLOOD_2  chr20  99   82  44   0    1  127   2        A      C      0.34646
-    BLOOD_3  chr20  99   0   110  1    0  111   1        C      G      0.009
-    BLOOD_1  chr20  100  3   5    100  0  108   1        G      C      0.0463
-    BLOOD_3  chr20  100  1   118  11   0  130   0        C      G      0.08462
+    #SAMPLE  CHR    POS  A   C    G    T  CVRG  ALLELES  MAJOR  MINOR  MAF      BIAS
+    BLOOD_1  chr20  99   0   101  1    2  104   1        C      T      0.01923  0.33657
+    BLOOD_2  chr20  99   82  44   0    1  127   2        A      C      0.34646  0.07823
+    BLOOD_3  chr20  99   0   110  1    0  111   1        C      G      0.009    1.00909
+    BLOOD_1  chr20  100  3   5    100  0  108   1        G      C      0.0463   0.15986
+    BLOOD_3  chr20  100  1   118  11   0  130   0        C      G      0.08462  0.04154
 
 -----
 
@@ -104,6 +105,8 @@ If a frequency threshold is used, alleles are only counted (in the ALLELES colum
 Strand bias:
 
 The alleles passing the threshold on each strand must match (though not in order), or the allele count will be 0. So a site with A, C, G on the plus strand and A, G on the minus strand will get an allele count of zero, though the (strand-independent) major allele, minor allele, and minor allele frequency will still be reported. If there is a tie for the minor allele, one will be randomly chosen.
+
+Additionally, a measure of strand bias is given in the last column. This is calculated using the method of Guo et al., 2012. A value of "." is given when there is no valid result of the calculation due to a zero denominator. This occurs when there are no reads on one of the strands, or when there is no minor allele.
 
   </help>
 
