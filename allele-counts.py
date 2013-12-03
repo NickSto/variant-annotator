@@ -1,30 +1,44 @@
 #!/usr/bin/python
-# This parses the output of Dan's "Naive Variant Detector" (previously,
-# "BAM Coverage"). It was forked from the code of "bam-coverage.py".
-# Or, to put it briefly,
-# cat variants.vcf | grep -v '^#' | cut -f 10 | cut -d ':' -f 4 | tr ',=' '\t:'
-#
-# New in this version:
-#   Made header line customizable
-#     - separate from internal column labels, which are used as dict keys
+"""
+Run with -h option or see DESCRIPTION for description.
+This script's functionality is being obsoleted by the new, and much more sanely
+written, nvc-filter.py.
+
+New in this version:
+  - Calculate strand bias
+  - Rename MINOR.FREQ.PERC to MAF
+
+Naive Variant Caller variant count parsing one-liner:
+$ cat variants.vcf | grep -v '^#' | cut -f 10 | cut -d ':' -f 4 | tr ',=' '\t:'
+"""
+from __future__ import division
 import os
 import sys
 import random
 from optparse import OptionParser
 
-COLUMNS = ['sample', 'chr', 'pos', 'A', 'C', 'G', 'T', 'coverage', 'alleles', 'major', 'minor', 'freq'] #, 'bias']
-COLUMN_LABELS = ['SAMPLE', 'CHR',  'POS', 'A', 'C', 'G', 'T', 'CVRG', 'ALLELES', 'MAJOR', 'MINOR', 'MINOR.FREQ.PERC.'] #, 'STRAND.BIAS']
+COLUMNS = ['sample', 'chr', 'pos', 'A', 'C', 'G', 'T', 'coverage', 'alleles',
+  'major', 'minor', 'freq', 'bias']
+COLUMN_LABELS = ['SAMPLE', 'CHR',  'POS', 'A', 'C', 'G', 'T', 'CVRG', 'ALLELES',
+  'MAJOR', 'MINOR', 'MAF', 'STRAND.BIAS']
 CANONICAL_VARIANTS = ['A', 'C', 'G', 'T']
 USAGE = """Usage: %prog [options] -i variants.vcf -o alleles.csv
        cat variants.vcf | %prog [options] > alleles.csv"""
 OPT_DEFAULTS = {'infile':'-', 'outfile':'-', 'freq_thres':1.0, 'covg_thres':100,
   'print_header':False, 'stdin':False, 'stranded':False, 'no_filter':False,
   'debug_loc':'', 'seed':''}
-DESCRIPTION = """This will parse the VCF output of Dan's "Naive Variant Caller" (aka "BAM Coverage") Galaxy tool. For each position reported, it counts the number of reads of each base, determines the major allele, minor allele (second most frequent variant), and number of alleles above a threshold. So currently it only considers SNVs (ACGT), including in the coverage figure. By default it reads from stdin and prints to stdout."""
+DESCRIPTION = """This will parse the VCF output of the "Naive Variant Caller"
+(aka "BAM Coverage") Galaxy tool. For each position reported, it counts the
+number of reads of each base, determines the major allele, minor allele (second
+most frequent variant), and number of alleles above a threshold. So currently
+it only considers SNVs (ACGT), including in the coverage figure. By default it
+reads from stdin and prints to stdout."""
 EPILOG = """Requirements:
 The input VCF must report the variants for each strand.
 The variants should be case-sensitive (e.g. all capital base letters).
-Strand bias: Both strands must show the same bases passing the frequency threshold (but not necessarily in the same order). If the site fails this test, the number of alleles is reported as 0."""
+Strand bias: Both strands must show the same bases passing the frequency
+threshold (but not necessarily in the same order). If the site fails this test,
+the number of alleles is reported as 0."""
 
 
 def get_options(defaults, usage, description='', epilog=''):
@@ -78,7 +92,7 @@ def main():
   infile = options.infile
   outfile = options.outfile
   print_header = options.print_header
-  freq_thres = options.freq_thres / 100.0
+  freq_thres = options.freq_thres / 100
   covg_thres = options.covg_thres
   stranded = options.stranded
   debug_loc = options.debug_loc
@@ -117,7 +131,7 @@ def main():
   else:
     try:
       outfile_handle = open(outfile, 'w')
-    except IOError, e:
+    except IOError:
       fail('Error: The given output filename '+outfile+' could not be opened.')
 
   # Take care of column names, print header
@@ -247,7 +261,7 @@ def read_site(line, sample_names, canonical):
           +"Failed on line:\n"+line)
       try:
         variant_counts[variant] = int(float(reads))
-      except ValueError, e:
+      except ValueError:
         fail("Error in input VCF: Variant count not a valid number. Failed on variant count string '"+reads+"'\nIn the following line:\n"+line)
 
     sample_counts[sample_names[i]] = variant_counts
@@ -330,14 +344,17 @@ def summarize_site(site, sample_names, canonical, freq_thres, covg_thres,
     sample['coverage'] = coverage
     try:
       sample['major']  = ranked_bases[0][0]
-    except IndexError, e:
+    except IndexError:
       sample['major']  = '.'
     try:
       sample['minor']  = ranked_bases[1][0]
-      sample['freq']   = round(ranked_bases[1][1]/float(coverage), 5)
-    except IndexError, e:
+      sample['freq']   = round(ranked_bases[1][1]/coverage, 5)
+    except IndexError:
       sample['minor']  = '.'
       sample['freq']   = 0.0
+
+    # Now that we've decided major and minor, we can calculate strand bias
+    sample['bias'] = round(get_strand_bias(sample, variants), 5)
 
     site_summary.append(sample)
 
@@ -393,12 +410,12 @@ def process_read_counts(variant_counts, freq_thres=0, sort=False, debug=False):
     print 'coverage: '+str(coverage)+', freq_thres: '+str(freq_thres)
     for variant in variant_counts:
       print (variant[0]+': '+str(variant[1])+'/'+str(float(coverage))+' = '+
-        str(variant[1]/float(coverage)))
+        str(variant[1]/coverage))
 
   # remove bases below the frequency threshold
   if freq_thres > 0:
     variant_counts = [variant for variant in variant_counts
-      if variant[1]/float(coverage) >= freq_thres]
+      if variant[1]/coverage >= freq_thres]
 
   return variant_counts
 
@@ -430,6 +447,22 @@ def count_alleles(variant_counts, freq_thres, debug=False):
     allele_count = len(alleles_plus)
 
   return allele_count
+
+
+def get_strand_bias(sample, variants):
+  """Based on method 1 (SB) of Guo et al., 2012
+  If any denominator would be zero, it returns 100000 as the score. This is
+  when there are no reads on one of the strands, or when there are no minor
+  allele reads."""
+  # using same variable names as in paper
+  a = variants.get('+'+sample['major'], 0) # forward major allele
+  b = variants.get('+'+sample['minor'], 0) # forward minor allele
+  c = variants.get('-'+sample['major'], 0) # reverse major allele
+  d = variants.get('-'+sample['minor'], 0) # reverse minor allele
+  if a+b <= 0 or c+d <= 0 or b+d <= 0:
+    return 100000
+  else:
+    return abs(b/(a+b) - d/(c+d)) / ((b+d) / (a+b+c+d))
 
 
 def print_site(filehandle, site, columns):
