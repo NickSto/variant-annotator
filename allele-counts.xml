@@ -1,6 +1,10 @@
 <tool id="allele_counts_1" version="1.2" name="Variant Annotator">
   <description> process variant counts</description>
-  <command interpreter="python">allele-counts.py -i $input -o $output -f $freq -c $covg $header $stranded $nofilt -r $seed</command>
+  <command interpreter="python">allele-counts.py -i $input -o $output -f $freq -c $covg $header $stranded $nofilt
+  #if $seed:
+    -r $seed
+  #end if
+  </command>
   <inputs>
     <param name="input" type="data" format="vcf" label="Input variants from Naive Variants Detector"/>
     <param name="freq" type="float" value="1.0" min="0" max="100" label="Minor allele frequency threshold" help="in percent"/>
