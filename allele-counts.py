@@ -23,8 +23,8 @@ COLUMNS = ['sample', 'chr', 'pos', 'A', 'C', 'G', 'T', 'coverage', 'alleles',
 COLUMN_LABELS = ['SAMPLE', 'CHR',  'POS', 'A', 'C', 'G', 'T', 'CVRG', 'ALLELES',
   'MAJOR', 'MINOR', 'MAF', 'BIAS']
 CANONICAL_VARIANTS = ['A', 'C', 'G', 'T']
-USAGE = """Usage: %prog [options] -i variants.vcf -o alleles.csv
-       cat variants.vcf | %prog [options] > alleles.csv"""
+USAGE = """Usage: %prog [options] -i variants.vcf -o alleles.tsv
+       cat variants.vcf | %prog [options] > alleles.tsv"""
 OPT_DEFAULTS = {'infile':'-', 'outfile':'-', 'freq_thres':1.0, 'covg_thres':100,
   'print_header':False, 'stdin':False, 'stranded':False, 'no_filter':False,
   'debug_loc':'', 'seed':''}
@@ -33,7 +33,15 @@ DESCRIPTION = """This will parse the VCF output of the "Naive Variant Caller"
 number of reads of each base, determines the major allele, minor allele (second
 most frequent variant), and number of alleles above a threshold. So currently
 it only considers SNVs (ACGT), including in the coverage figure. By default it
-reads from stdin and prints to stdout."""
+reads from stdin and prints to stdout.
+Prints a tab-delimited set of statistics to stdout.
+To print output column labels, run "$ echo -n | ./allele-counts.py -H".
+The columns are: 1:SAMPLE 2:CHR 3:POS 4:A 5:C 6:G 7:T 8:CVRG 9:ALLELES 10:MAJOR
+11:MINOR 12:MAF 13:BIAS,
+unless the --stranded option is used, in which case they are:
+1:SAMPLE 2:CHR 3:POS 4:+A 5:+C 6:+G 7:+T 8:-A 9:-C 10:-G 11:-T 12:CVRG
+13:ALLELES 14:MAJOR 15:MINOR 16:MAF 17:BIAS.
+"""
 EPILOG = """Requirements:
 The input VCF must report the variants for each strand.
 The variants should be case-sensitive (e.g. all capital base letters).
