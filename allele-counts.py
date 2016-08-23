@@ -238,7 +238,7 @@ def read_site(line, sample_names, canonical):
 
   if len(fields) < 9:
     fail("Error in input VCF: wrong number of fields in data line. "
-          +"Failed on line:\n"+line)
+         "Failed on line:\n"+line)
 
   site['chr'] = fields[0]
   site['pos'] = fields[1]
@@ -246,35 +246,38 @@ def read_site(line, sample_names, canonical):
 
   if len(samples) < len(sample_names):
     fail("Error in input VCF: missing sample fields in data line. "
-          +"Failed on line:\n"+line)
+         "Failed on line:\n"+line)
   elif len(samples) > len(sample_names):
     fail("Error in input VCF: more sample fields in data line than in header. "
-          +"Failed on line:\n"+line)
+         "Failed on line:\n"+line)
 
   sample_counts = {}
   for i in range(len(samples)):
-    
+
     variant_counts = {}
     counts = samples[i].split(':')[-1]
     counts = counts.split(',')
 
     for count in counts:
-      if not count:
+      if not count or count == '.':
         continue
       fields = count.split('=')
       if len(fields) != 2:
         fail("Error in input VCF: Incorrect variant data format (must contain "
-          +"a single '='). Failed on line:\n"+line)
+             "a single '='). Failed on data \"{}\" in line:\n{}"
+             .format(count, line))
       (variant, reads) = fields
       if variant[1:] not in canonical:
         continue
-      if variant[0] != '-' and variant[0] != '+':
-        fail("Error in input VCF: variant data not strand-specific. "
-          +"Failed on line:\n"+line)
+      if not variant.startswith('-') and not variant.startswith('+'):
+        fail("Error in input VCF: variant data not strand-specific. Failed on "
+             "data \"{}\" on line:\n{}".format(variant, line))
       try:
         variant_counts[variant] = int(float(reads))
       except ValueError:
-        fail("Error in input VCF: Variant count not a valid number. Failed on variant count string '"+reads+"'\nIn the following line:\n"+line)
+        fail("Error in input VCF: Variant count not a valid number. Failed on "
+             "variant count string \"{}\"\nIn the following line:\n{}"
+             .format(reads, line))
 
     sample_counts[sample_names[i]] = variant_counts
 
