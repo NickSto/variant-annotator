@@ -53,17 +53,16 @@ def main():
       sys.stderr.write("Error: unrecognized option '"+sys.argv[1]+"'\n")
       sys.exit(1)
 
-  test_dir = os.path.dirname(os.path.relpath(sys.argv[0]))
-  script_dir = os.path.dirname(test_dir)
-  if test_dir:
-    test_dir += os.sep
+  test_dir = os.path.dirname(os.path.realpath(__file__))
+  script_dir = os.path.relpath(os.path.dirname(test_dir))
+  test_dir = os.path.relpath(test_dir)
 
   if do_print_xml:
     print XML.get('tests_start')
 
   for dataset in DATASETS:
-    infile  = test_dir+dataset+IN_EXT
-    outfile = test_dir+dataset+OUT_EXT
+    infile  = os.path.join(test_dir, dataset+IN_EXT)
+    outfile = os.path.join(test_dir, dataset+OUT_EXT)
 
     if not os.path.exists(infile):
       sys.stderr.write("Error: file not found: "+infile+"\n")
@@ -83,7 +82,7 @@ def main():
 
 
 def run_tests(infile, outfile, options, script_dir):
-  script_cmd = script_dir+os.sep+SCRIPT_NAME+' '+options+' -i '+infile
+  script_cmd = os.path.join(script_dir, SCRIPT_NAME)+' '+options+' -i '+infile
   bash_cmd = 'diff '+outfile+' <('+script_cmd+')'
   print script_cmd
   subprocess.call(['bash', '-c', bash_cmd])
