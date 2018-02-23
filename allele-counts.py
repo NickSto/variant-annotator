@@ -48,6 +48,8 @@ The variants should be case-sensitive (e.g. all capital base letters).
 Strand bias: Both strands must show the same bases passing the frequency
 threshold (but not necessarily in the same order). If the site fails this test,
 the number of alleles is reported as 0."""
+infile_handle = None
+outfile_handle = None
 
 def get_options(defaults, usage, description='', epilog=''):
   """Get options, print usage text."""
@@ -124,7 +126,6 @@ def main():
     if len(coords) > 2: print_sample = coords[2]
 
   # set infile_handle to either stdin or the input file
-  global infile_handle
   if infile == OPT_DEFAULTS.get('infile'):
     infile_handle = sys.stdin
     sys.stderr.write("Reading from standard input..\n")
@@ -135,7 +136,6 @@ def main():
       fail('Error: Input VCF file '+infile+' not found.')
 
   # set outfile_handle to either stdout or the output file
-  global outfile_handle
   if outfile == OPT_DEFAULTS.get('outfile'):
     outfile_handle = sys.stdout
   else:
