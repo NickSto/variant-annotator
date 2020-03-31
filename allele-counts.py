@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/python3
 """
 Run with -h option or see DESCRIPTION for description.
 This script's functionality is being obsoleted by the new, and much more sanely
@@ -11,7 +11,6 @@ New in this version:
 Naive Variant Caller variant count parsing one-liner:
 $ cat variants.vcf | grep -v '^#' | cut -f 10 | cut -d ':' -f 4 | tr ',=' '\t:'
 """
-from __future__ import division
 import os
 import sys
 import errno
@@ -48,8 +47,7 @@ The variants should be case-sensitive (e.g. all capital base letters).
 Strand bias: Both strands must show the same bases passing the frequency
 threshold (but not necessarily in the same order). If the site fails this test,
 the number of alleles is reported as 0."""
-infile_handle = None
-outfile_handle = None
+
 
 def get_options(defaults, usage, description='', epilog=''):
   """Get options, print usage text."""
@@ -186,22 +184,17 @@ def main():
           sys.stderr.write("Error: Sample '"+print_sample+"' not found.\n")
           sys.exit(1)
 
-
     site_summary = summarize_site(site_data, sample_names, CANONICAL_VARIANTS,
       freq_thres, covg_thres, stranded, debug=debug)
 
     if debug and site_summary[0]['print']:
-        print line.split('\t')[9].split(':')[-1]
+      print(line.split('\t')[9].split(':')[-1])
 
     try:
       print_site(outfile_handle, site_summary, COLUMNS)
     except IOError as ioe:
       if ioe.errno == errno.EPIPE:
-        cleanup()
         sys.exit(0)
-
-  # close any open filehandles
-  cleanup()
 
   # keeps Galaxy from giving an error if there were messages on stderr
   sys.exit(0)
@@ -341,7 +334,7 @@ def summarize_site(site, sample_names, canonical, freq_thres, covg_thres,
         sample[strand+base_count[0]] = base_count[1]
       # fill in any zeros
       for base in canonical:
-        if not sample.has_key(strand+base):
+        if strand+base not in sample:
           sample[strand+base] = 0
 
     sample['alleles'] = count_alleles(variants, freq_thres, debug=debug)
@@ -354,7 +347,7 @@ def summarize_site(site, sample_names, canonical, freq_thres, covg_thres,
         ranked_bases[1] = ranked_bases[2]
         ranked_bases[2] = tmp_base
 
-    if debug: print "ranked +-: "+str(ranked_bases)
+    if debug: print("ranked +-: "+str(ranked_bases))
 
     sample['coverage'] = coverage
     try:
@@ -399,7 +392,7 @@ def get_read_counts(stranded_counts, strands='+-'):
     if strand in strands:
       summed_counts[base] = stranded_counts[variant] + summed_counts.get(base, 0)
 
-  return summed_counts.items()
+  return list(summed_counts.items())
 
 
 def process_read_counts(variant_counts, freq_thres=0, sort=False, debug=False):
@@ -426,10 +419,10 @@ def process_read_counts(variant_counts, freq_thres=0, sort=False, debug=False):
     variant_counts.sort(reverse=True, key=lambda variant: variant[1])
 
   if debug:
-    print 'coverage: '+str(coverage)+', freq_thres: '+str(freq_thres)
+    print('coverage: '+str(coverage)+', freq_thres: '+str(freq_thres))
     for variant in variant_counts:
-      print (variant[0]+': '+str(variant[1])+'/'+str(float(coverage))+' = '+
-        str(variant[1]/coverage))
+      print((variant[0]+': '+str(variant[1])+'/'+str(float(coverage))+' = '+
+        str(variant[1]/coverage)))
 
   # remove bases below the frequency threshold
   if freq_thres > 0:
@@ -455,8 +448,8 @@ def count_alleles(variant_counts, freq_thres, debug=False):
     sort=False, debug=debug)
 
   if debug:
-    print '+ '+str(alleles_plus)
-    print '- '+str(alleles_minus)
+    print('+ '+str(alleles_plus))
+    print('- '+str(alleles_minus))
 
   # Check if each strand reports the same set of alleles.
   # Sorting by base is to compare lists without regard to order (as sets).
@@ -495,16 +488,8 @@ def print_site(filehandle, site, columns):
 
 
 def fail(message):
-  cleanup()
   sys.stderr.write(message+'\n')
   sys.exit(1)
-
-
-def cleanup():
-  if isinstance(infile_handle, file):
-    infile_handle.close()
-  if isinstance(outfile_handle, file):
-    outfile_handle.close()
 
 
 if __name__ == "__main__":

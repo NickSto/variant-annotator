@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 import os
 import sys
 import subprocess
@@ -58,7 +58,7 @@ def main():
   test_dir = os.path.relpath(test_dir)
 
   if do_print_xml:
-    print XML.get('tests_start')
+    print(XML.get('tests_start'))
 
   for dataset in DATASETS:
     infile  = os.path.join(test_dir, dataset+IN_EXT)
@@ -78,13 +78,13 @@ def main():
       run_tests(infile, outfile, options, script_dir)
 
   if do_print_xml:
-    print XML.get('tests_end')
+    print(XML.get('tests_end'))
 
 
 def run_tests(infile, outfile, options, script_dir):
   script_cmd = os.path.join(script_dir, SCRIPT_NAME)+' '+options+' -i '+infile
   bash_cmd = 'diff '+outfile+' <('+script_cmd+')'
-  print script_cmd
+  print(script_cmd)
   subprocess.call(['bash', '-c', bash_cmd])
 
 
@@ -94,29 +94,28 @@ def print_xml(infile, outfile, options_str, xml, params, param_arg):
 
   options = options_str.split()  # on whitespace
 
-  print xml.get('test_start')
-  print xml.get('input') % infile
+  print(xml.get('test_start'))
+  print(xml.get('input') % infile)
 
   # read in options one at a time, print <param> line
   i = 0
   while i < len(options):
     opt = options[i]
-    if not params.has_key(opt) or not param_arg.has_key(opt):
-      sys.stderr.write("Error: unknown option '"+opt+"' in ARGS list in file "
-        +infile+"\n")
+    if opt not in params or opt not in param_arg:
+      sys.stderr.write("Error: unknown option '"+opt+"' in ARGS list in file "+infile+"\n")
       sys.exit(1)
     # takes argument
     if param_arg[opt]:
       i+=1
       arg = options[i]
-      print xml.get('param') % (params[opt], arg)
+      print(xml.get('param') % (params[opt], arg))
     # no argument (boolean)
     else:
-      print xml.get('param') % (params[opt], 'true')
+      print(xml.get('param') % (params[opt], 'true'))
     i+=1
 
-  print xml.get('output') % outfile
-  print xml.get('test_end')
+  print(xml.get('output') % outfile)
+  print(xml.get('test_end'))
 
 
 def read_options(infile):
