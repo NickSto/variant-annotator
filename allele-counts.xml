@@ -4,9 +4,9 @@
     <exit_code range="1:" level="fatal" />
     <exit_code range=":-1" level="fatal" />
   </stdio>
-  <command>allele-counts.py -i $input -o $output -f $freq -c $covg $header $stranded $nofilt
+  <command>allele-counts.py -i '$input' -o '$output' -f $freq -c $covg $header $stranded $nofilt
   #if $seed:
-    -r $seed
+    -r '$seed'
   #end if
   </command>
   <inputs>
