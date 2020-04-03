@@ -1,0 +1,8 @@
+categories: [Variant Analysis]
+description: "Variant Annotator: count variants and calculate statistics"
+name: allele_counts
+owner: nick
+homepage_url: https://github.com/galaxyproject/dunovo
+remote_repository_url: https://github.com/galaxyproject/dunovo
+long_description: |
+  This tool parses variant counts from a type of VCF file produced by tools like the Naive Variant Detector. In addition to producing variant counts, the tool can filter by frequency, coverage, and strand bias, produce allele totals, and calculate minor allele frequencies.
